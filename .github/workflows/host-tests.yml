@@ -1,0 +1,13 @@
+name: Host Tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  host-logic-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run host logic tests
+        run: ./scripts/run-host-tests.sh
