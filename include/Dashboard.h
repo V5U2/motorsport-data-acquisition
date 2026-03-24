@@ -15,11 +15,12 @@ class Dashboard {
   bool begin();
   void render(const AppState &state);
   void nextScreen();
-  Screen currentScreen() const;
+ Screen currentScreen() const;
 
  private:
   void drawMainScreen(const AppState &state);
   void drawDiagnosticsScreen(const AppState &state);
+  uint8_t diagnosticsPageCount() const;
   void drawGauge(int16_t centerX,
                  int16_t centerY,
                  int16_t radius,
@@ -40,5 +41,6 @@ class Dashboard {
 
   TFT_eSPI tft_;
   Screen screen_ = Screen::Main;
+  uint8_t diagnosticsPage_ = 0;
   bool ready_ = false;
 };

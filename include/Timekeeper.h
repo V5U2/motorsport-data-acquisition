@@ -7,8 +7,8 @@ class Timekeeper {
  public:
   bool begin(TwoWire &wire);
   bool isReady() const;
-  String logTimestamp(uint32_t uptimeMs) const;
-  String dateStamp() const;
+  String logTimestamp(uint32_t uptimeMs);
+  String dateStamp();
   String lastError() const;
 
  private:

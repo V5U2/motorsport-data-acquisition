@@ -1,9 +1,11 @@
 # Motorsport Data Acquisition
 
-ESP32-S3 Arduino/PlatformIO firmware for a two-channel 4-20 mA motorsport logger and dashboard.
+ESP32-S3 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and dashboard.
+
+GitHub releases use Semantic Versioning with `release-please`, and commits should follow Conventional Commits such as `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `build:`, and `ci:`.
 
 ## Features
-- Reads oil pressure and oil temperature from 4-20 mA sensors through an ADS1115 and 165 ohm shunts
+- Reads a configurable set of 4-20 mA sensors through an ADS1115 and 165 ohm shunts
 - Displays live gauges and diagnostics on a 480x320 SPI TFT
 - Logs CSV data to microSD with DS3231 RTC timestamps
 - Serves a lightweight Wi-Fi dashboard and CSV download endpoints
@@ -52,7 +54,7 @@ ESP32-S3 Arduino/PlatformIO firmware for a two-channel 4-20 mA motorsport logger
 | 1 | Enclosure and wiring set | Connectors, terminals, mounting hardware, and harness materials |
 
 ### Integration notes
-- The firmware assumes two sensor channels using the calibration ranges in [`include/AppConfig.h`](include/AppConfig.h).
+- The firmware sensor list is defined in [`include/AppConfig.h`](include/AppConfig.h), so future channels can be added there without changing the overall project structure.
 - The default wiring and pin map are documented in [`docs/hardware-setup.md`](docs/hardware-setup.md) and [`include/PinDefinitions.h`](include/PinDefinitions.h).
 - If the TFT controller, ESP32 pinout, or storage wiring differs from the defaults, update the hardware definitions before flashing.
 
@@ -79,6 +81,12 @@ ESP32-S3 Arduino/PlatformIO firmware for a two-channel 4-20 mA motorsport logger
 - Run `./scripts/run-host-tests.sh` to execute hardware-independent logic tests on a desktop machine.
 - These tests cover sensor current conversion, threshold faults, engineering-value clamping, filter behavior, RTC/fallback timestamp formatting, and log filename sanitization edge cases.
 - GitHub Actions is configured to run the same host test suite on pushes and pull requests in [host-tests.yml](.github/workflows/host-tests.yml).
+
+## Release process
+1. Merge changes into `main` using Conventional Commit-style messages such as `feat:`, `fix:`, or `docs:`.
+2. The [`release-please`](.github/workflows/release-please.yml) workflow updates or opens a release PR based on those commits.
+3. When that release PR is merged, `release-please` creates the next `v*` tag and GitHub release.
+4. The [`release-firmware`](.github/workflows/release.yml) workflow rebuilds the firmware for that tag and attaches the generated binaries to the GitHub release.
 
 ## Runtime controls
 - Short press the UI button to switch between the main gauge screen and the diagnostics screen.

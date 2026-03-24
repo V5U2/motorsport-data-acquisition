@@ -6,6 +6,8 @@ namespace {
 
 constexpr float kGaugeStartDeg = 150.0f;
 constexpr float kGaugeSweepDeg = 240.0f;
+constexpr uint8_t kMainScreenSensorCapacity = 4;
+constexpr uint8_t kDiagnosticsSensorsPerPage = 2;
 
 float mapRange(const float value,
                const float inMin,
@@ -50,27 +52,79 @@ void Dashboard::render(const AppState &state) {
 }
 
 void Dashboard::nextScreen() {
-  screen_ = (screen_ == Screen::Main) ? Screen::Diagnostics : Screen::Main;
+  if (screen_ == Screen::Main) {
+    screen_ = Screen::Diagnostics;
+    diagnosticsPage_ = 0;
+    return;
+  }
+
+  if (diagnosticsPage_ + 1 < diagnosticsPageCount()) {
+    diagnosticsPage_++;
+    return;
+  }
+
+  screen_ = Screen::Main;
+  diagnosticsPage_ = 0;
 }
 
 Dashboard::Screen Dashboard::currentScreen() const { return screen_; }
+
+uint8_t Dashboard::diagnosticsPageCount() const {
+  return (AppConfig::kSensorCount + kDiagnosticsSensorsPerPage - 1) / kDiagnosticsSensorsPerPage;
+}
 
 void Dashboard::drawMainScreen(const AppState &state) {
   tft_.setTextColor(TFT_WHITE, AppConfig::kDisplay.backgroundColor);
   tft_.drawString("Motorsport Data Logger", 240, 20, 4);
   tft_.drawString(state.timestamp, 240, 46, 2);
 
-  drawGauge(120, 185, 95, state.pressure);
-  drawGauge(360, 185, 95, state.temperature);
+  struct GaugeLayout {
+    int16_t x;
+    int16_t y;
+    int16_t radius;
+  };
 
-  const bool faultLatched =
-      state.pressure.latchedFault != SensorFault::None ||
-      state.temperature.latchedFault != SensorFault::None;
-  if (faultLatched) {
+  const uint8_t visibleCount =
+      (AppConfig::kSensorCount < kMainScreenSensorCapacity) ? AppConfig::kSensorCount
+                                                            : kMainScreenSensorCapacity;
+  GaugeLayout layouts[kMainScreenSensorCapacity]{};
+  if (visibleCount <= 1) {
+    layouts[0] = {240, 180, 95};
+  } else if (visibleCount == 2) {
+    layouts[0] = {120, 185, 95};
+    layouts[1] = {360, 185, 95};
+  } else if (visibleCount == 3) {
+    layouts[0] = {240, 110, 68};
+    layouts[1] = {130, 240, 68};
+    layouts[2] = {350, 240, 68};
+  } else {
+    layouts[0] = {130, 110, 62};
+    layouts[1] = {350, 110, 62};
+    layouts[2] = {130, 240, 62};
+    layouts[3] = {350, 240, 62};
+  }
+
+  for (uint8_t index = 0; index < visibleCount; ++index) {
+    drawGauge(layouts[index].x, layouts[index].y, layouts[index].radius, state.sensors[index]);
+  }
+
+  uint8_t latchedFaultCount = 0;
+  for (const SensorSnapshot &sensor : state.sensors) {
+    if (sensor.latchedFault != SensorFault::None) {
+      latchedFaultCount++;
+    }
+  }
+
+  if (AppConfig::kSensorCount > visibleCount) {
+    tft_.setTextColor(TFT_LIGHTGREY, AppConfig::kDisplay.backgroundColor);
+    tft_.drawString("Showing first " + String(visibleCount) + " of " + String(AppConfig::kSensorCount) +
+                        " sensors",
+                    240, 264, 2);
+  }
+
+  if (latchedFaultCount > 0) {
     tft_.fillRoundRect(55, 280, 370, 28, 6, TFT_RED);
-    const String message = "Latched fault: " +
-                           String(sensorFaultToString(state.pressure.latchedFault)) + " / " +
-                           sensorFaultToString(state.temperature.latchedFault);
+    const String message = "Latched sensor faults: " + String(latchedFaultCount);
     tft_.setTextColor(TFT_WHITE, TFT_RED);
     tft_.drawString(message, 240, 294, 2);
   } else {
@@ -83,19 +137,28 @@ void Dashboard::drawMainScreen(const AppState &state) {
 void Dashboard::drawDiagnosticsScreen(const AppState &state) {
   tft_.setTextColor(TFT_WHITE, AppConfig::kDisplay.backgroundColor);
   tft_.drawString("Diagnostics", 240, 18, 4);
+  tft_.drawString("Page " + String(diagnosticsPage_ + 1) + "/" + String(diagnosticsPageCount()),
+                  240, 40, 2);
 
-  drawStatusLine(20, 52, "Log file", state.system.currentLogFile, TFT_CYAN);
-  drawStatusLine(20, 76, "Wi-Fi", state.system.wifiMode + " " + state.system.ipAddress, TFT_GREEN);
-  drawStatusLine(20, 100, "RTC", state.system.rtcReady ? "OK" : "FAULT", state.system.rtcReady ? TFT_GREEN : TFT_RED);
-  drawStatusLine(20, 124, "SD", state.system.sdReady ? "OK" : state.system.lastLogError, state.system.sdReady ? TFT_GREEN : TFT_RED);
-  drawStatusLine(20, 148, "ADC", state.system.adcReady ? "OK" : "FAULT", state.system.adcReady ? TFT_GREEN : TFT_RED);
+  drawStatusLine(20, 60, "Log file", state.system.currentLogFile, TFT_CYAN);
+  drawStatusLine(20, 84, "Wi-Fi", state.system.wifiMode + " " + state.system.ipAddress, TFT_GREEN);
+  drawStatusLine(20, 108, "RTC", state.system.rtcReady ? "OK" : "FAULT",
+                 state.system.rtcReady ? TFT_GREEN : TFT_RED);
+  drawStatusLine(20, 132, "SD", state.system.sdReady ? "OK" : state.system.lastLogError,
+                 state.system.sdReady ? TFT_GREEN : TFT_RED);
+  drawStatusLine(20, 156, "ADC", state.system.adcReady ? "OK" : "FAULT",
+                 state.system.adcReady ? TFT_GREEN : TFT_RED);
 
-  tft_.drawFastHLine(20, 170, 440, TFT_DARKGREY);
+  tft_.drawFastHLine(20, 178, 440, TFT_DARKGREY);
 
-  const SensorSnapshot sensors[2] = {state.pressure, state.temperature};
-  for (uint8_t index = 0; index < 2; ++index) {
-    const int16_t top = 180 + (index * 62);
-    const SensorSnapshot &sensor = sensors[index];
+  const uint8_t startIndex = diagnosticsPage_ * kDiagnosticsSensorsPerPage;
+  const uint8_t endIndex =
+      ((startIndex + kDiagnosticsSensorsPerPage) < AppConfig::kSensorCount)
+          ? (startIndex + kDiagnosticsSensorsPerPage)
+          : AppConfig::kSensorCount;
+  for (uint8_t index = startIndex; index < endIndex; ++index) {
+    const int16_t top = 188 + ((index - startIndex) * 62);
+    const SensorSnapshot &sensor = state.sensors[index];
     tft_.setTextDatum(TL_DATUM);
     tft_.setTextColor(TFT_WHITE, AppConfig::kDisplay.backgroundColor);
     tft_.drawString(sensor.name, 24, top, 4);
@@ -149,11 +212,11 @@ void Dashboard::drawGauge(const int16_t centerX,
   tft_.setTextColor(TFT_WHITE, TFT_BLACK);
   tft_.drawString(sensor.name, centerX, centerY - 30, 2);
   tft_.setTextColor(valueColor(sensor), TFT_BLACK);
-  tft_.drawString(String(sensor.filteredValue, 1), centerX, centerY + 4, 7);
+  tft_.drawString(String(sensor.filteredValue, 1), centerX, centerY + 4, radius >= 90 ? 7 : 4);
   tft_.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft_.drawString(sensor.units, centerX, centerY + 42, 2);
+  tft_.drawString(sensor.units, centerX, centerY + (radius >= 90 ? 42 : 28), 2);
   tft_.drawString(String(sensor.minValue, 1) + " / " + String(sensor.maxValue, 1), centerX,
-                  centerY + 66, 2);
+                  centerY + (radius >= 90 ? 66 : 44), 2);
 }
 
 void Dashboard::drawGaugeArc(const int16_t centerX,

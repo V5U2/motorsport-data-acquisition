@@ -1,4 +1,5 @@
 #include <Adafruit_ADS1X15.h>
+#include <array>
 #include <SPI.h>
 #include <Wire.h>
 
@@ -13,8 +14,13 @@ namespace {
 
 Adafruit_ADS1115 ads;
 SPIClass spiBus(FSPI);
-SensorChannel pressureChannel(AppConfig::kOilPressureConfig);
-SensorChannel temperatureChannel(AppConfig::kOilTemperatureConfig);
+std::array<SensorChannel, AppConfig::kSensorCount> sensorChannels = [] {
+  std::array<SensorChannel, AppConfig::kSensorCount> channels{};
+  for (size_t index = 0; index < AppConfig::kSensorCount; ++index) {
+    channels[index].configure(AppConfig::kSensorConfigs[index]);
+  }
+  return channels;
+}();
 Timekeeper timekeeper;
 CsvLogger csvLogger;
 Dashboard dashboard;
@@ -38,8 +44,9 @@ float readVoltage(const uint8_t channel) {
 }
 
 void clearFaults() {
-  pressureChannel.clearLatchedFault();
-  temperatureChannel.clearLatchedFault();
+  for (SensorChannel &sensor : sensorChannels) {
+    sensor.clearLatchedFault();
+  }
 }
 
 void handleButton() {
@@ -65,8 +72,9 @@ void handleButton() {
 
 AppState buildState() {
   AppState state{};
-  state.pressure = pressureChannel.snapshot();
-  state.temperature = temperatureChannel.snapshot();
+  for (size_t index = 0; index < sensorChannels.size(); ++index) {
+    state.sensors[index] = sensorChannels[index].snapshot();
+  }
   state.uptimeMs = millis();
   state.timestamp = timekeeper.logTimestamp(state.uptimeMs);
   state.system.adcReady = adcReady;
@@ -81,11 +89,11 @@ AppState buildState() {
 }
 
 void sampleSensors() {
-  const float pressureVoltage = adcReady ? readVoltage(AppConfig::kOilPressureConfig.adsChannel) : 0.0f;
-  const float tempVoltage = adcReady ? readVoltage(AppConfig::kOilTemperatureConfig.adsChannel) : 0.0f;
-
-  pressureChannel.update(pressureVoltage, adcReady);
-  temperatureChannel.update(tempVoltage, adcReady);
+  for (size_t index = 0; index < sensorChannels.size(); ++index) {
+    const AppConfig::SensorConfig &config = AppConfig::kSensorConfigs[index];
+    const float voltage = adcReady ? readVoltage(config.adsChannel) : 0.0f;
+    sensorChannels[index].update(voltage, adcReady);
+  }
 }
 
 }  // namespace
@@ -134,7 +142,7 @@ void loop() {
   if ((nowMs - lastLogMs) >= AppConfig::kTiming.loggingIntervalMs) {
     AppState state = buildState();
     if (csvLogger.isReady()) {
-      if (csvLogger.logRow(timekeeper, state.uptimeMs, state.pressure, state.temperature)) {
+      if (csvLogger.logRow(timekeeper, state.uptimeMs, state.sensors)) {
         csvLogger.flushIfNeeded(state.uptimeMs);
       }
     }

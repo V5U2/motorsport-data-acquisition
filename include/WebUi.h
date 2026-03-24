@@ -19,10 +19,11 @@ class WebUi {
   void registerRoutes();
   void handleIndex();
   void handleLiveJson();
-  void handleFilesJson();
+ void handleFilesJson();
   void handleDownload();
   String liveJson() const;
   String indexHtml() const;
+  String sensorCardsHtml() const;
 
   WebServer server_{80};
   CsvLogger *logger_ = nullptr;

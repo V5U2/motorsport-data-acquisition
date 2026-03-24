@@ -6,14 +6,16 @@
 
 class SensorChannel {
  public:
+  SensorChannel() = default;
   explicit SensorChannel(const AppConfig::SensorConfig &config);
+  void configure(const AppConfig::SensorConfig &config);
 
   void update(float sensedVoltage, bool adcAvailable);
   void clearLatchedFault();
   SensorSnapshot snapshot() const;
 
  private:
-  AppConfig::SensorConfig config_;
+  const AppConfig::SensorConfig *config_ = nullptr;
   float rawVoltage_ = 0.0f;
   float currentmA_ = 0.0f;
   float engineeringValue_ = 0.0f;

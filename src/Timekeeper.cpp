@@ -29,7 +29,7 @@ bool Timekeeper::begin(TwoWire &wire) {
 
 bool Timekeeper::isReady() const { return ready_; }
 
-String Timekeeper::logTimestamp(const uint32_t uptimeMs) const {
+String Timekeeper::logTimestamp(const uint32_t uptimeMs) {
   if (!ready_) {
     return String(Logic::fallbackTimestamp(uptimeMs).c_str());
   }
@@ -44,7 +44,7 @@ String Timekeeper::logTimestamp(const uint32_t uptimeMs) const {
                     .c_str());
 }
 
-String Timekeeper::dateStamp() const {
+String Timekeeper::dateStamp() {
   if (!ready_) {
     return "boot";
   }

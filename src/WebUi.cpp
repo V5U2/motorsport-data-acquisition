@@ -90,18 +90,21 @@ String WebUi::liveJson() const {
   String json = "{";
   json += "\"timestamp\":\"" + state_.timestamp + "\",";
   json += "\"uptime_ms\":" + String(state_.uptimeMs) + ",";
-  json += "\"pressure\":{";
-  json += "\"name\":\"" + String(state_.pressure.name) + "\",";
-  json += "\"value\":" + String(state_.pressure.filteredValue, 3) + ",";
-  json += "\"units\":\"" + String(state_.pressure.units) + "\",";
-  json += "\"loop_mA\":" + String(state_.pressure.loopCurrentmA, 3) + ",";
-  json += "\"fault\":\"" + String(sensorFaultToString(state_.pressure.activeFault)) + "\"},";
-  json += "\"temperature\":{";
-  json += "\"name\":\"" + String(state_.temperature.name) + "\",";
-  json += "\"value\":" + String(state_.temperature.filteredValue, 3) + ",";
-  json += "\"units\":\"" + String(state_.temperature.units) + "\",";
-  json += "\"loop_mA\":" + String(state_.temperature.loopCurrentmA, 3) + ",";
-  json += "\"fault\":\"" + String(sensorFaultToString(state_.temperature.activeFault)) + "\"},";
+  json += "\"sensors\":[";
+  for (size_t index = 0; index < state_.sensors.size(); ++index) {
+    const SensorSnapshot &sensor = state_.sensors[index];
+    if (index > 0) {
+      json += ",";
+    }
+    json += "{";
+    json += "\"id\":\"" + String(sensor.id) + "\",";
+    json += "\"name\":\"" + String(sensor.name) + "\",";
+    json += "\"value\":" + String(sensor.filteredValue, 3) + ",";
+    json += "\"units\":\"" + String(sensor.units) + "\",";
+    json += "\"loop_mA\":" + String(sensor.loopCurrentmA, 3) + ",";
+    json += "\"fault\":\"" + String(sensorFaultToString(sensor.activeFault)) + "\"}";
+  }
+  json += "],";
   json += "\"system\":{";
   json += "\"adc_ready\":" + String(state_.system.adcReady ? "true" : "false") + ",";
   json += "\"rtc_ready\":" + String(state_.system.rtcReady ? "true" : "false") + ",";
@@ -113,8 +116,22 @@ String WebUi::liveJson() const {
   return json;
 }
 
+String WebUi::sensorCardsHtml() const {
+  String html;
+  for (size_t index = 0; index < AppConfig::kSensorCount; ++index) {
+    const AppConfig::SensorConfig &sensor = AppConfig::kSensorConfigs[index];
+    html += "<div class=\"card sensor-card\" data-sensor-id=\"" + String(sensor.id) + "\">";
+    html += "<div class=\"label\">" + String(sensor.name) + "</div>";
+    html += "<div class=\"value\" id=\"sensor-value-" + String(sensor.id) + "\">--</div>";
+    html += "<div class=\"status\"><span id=\"sensor-loop-" + String(sensor.id) +
+            "\">--</span><span id=\"sensor-fault-" + String(sensor.id) + "\">--</span></div>";
+    html += "</div>";
+  }
+  return html;
+}
+
 String WebUi::indexHtml() const {
-  return R"rawliteral(
+  const String htmlStart = R"rawliteral(
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -136,20 +153,13 @@ String WebUi::indexHtml() const {
 </head>
 <body>
   <header>
-    <h1>ESP32 Oil Logger</h1>
+    <h1>ESP32 Sensor Logger</h1>
     <div id="stamp">Waiting for data...</div>
   </header>
   <section class="grid">
-    <div class="card">
-      <div class="label">Oil Pressure</div>
-      <div class="value" id="pressure">--</div>
-      <div class="status"><span id="pressureLoop">--</span><span id="pressureFault">--</span></div>
-    </div>
-    <div class="card">
-      <div class="label">Oil Temperature</div>
-      <div class="value" id="temperature">--</div>
-      <div class="status"><span id="tempLoop">--</span><span id="tempFault">--</span></div>
-    </div>
+)rawliteral";
+
+  const String htmlEnd = R"rawliteral(
     <div class="card">
       <div class="label">System</div>
       <div class="status"><span>ADC</span><span id="adcStatus">--</span></div>
@@ -168,12 +178,11 @@ String WebUi::indexHtml() const {
       const response = await fetch('/api/live');
       const data = await response.json();
       document.getElementById('stamp').textContent = data.timestamp + ' | uptime ' + data.uptime_ms + ' ms';
-      document.getElementById('pressure').textContent = data.pressure.value.toFixed(1) + ' ' + data.pressure.units;
-      document.getElementById('temperature').textContent = data.temperature.value.toFixed(1) + ' ' + data.temperature.units;
-      document.getElementById('pressureLoop').textContent = data.pressure.loop_mA.toFixed(2) + ' mA';
-      document.getElementById('tempLoop').textContent = data.temperature.loop_mA.toFixed(2) + ' mA';
-      document.getElementById('pressureFault').textContent = data.pressure.fault;
-      document.getElementById('tempFault').textContent = data.temperature.fault;
+      data.sensors.forEach((sensor) => {
+        document.getElementById('sensor-value-' + sensor.id).textContent = sensor.value.toFixed(1) + ' ' + sensor.units;
+        document.getElementById('sensor-loop-' + sensor.id).textContent = sensor.loop_mA.toFixed(2) + ' mA';
+        document.getElementById('sensor-fault-' + sensor.id).textContent = sensor.fault;
+      });
       document.getElementById('adcStatus').textContent = data.system.adc_ready ? 'OK' : 'FAULT';
       document.getElementById('rtcStatus').textContent = data.system.rtc_ready ? 'OK' : 'FAULT';
       document.getElementById('sdStatus').textContent = data.system.sd_ready ? 'OK' : 'FAULT';
@@ -211,4 +220,6 @@ String WebUi::indexHtml() const {
 </body>
 </html>
 )rawliteral";
+
+  return htmlStart + sensorCardsHtml() + htmlEnd;
 }

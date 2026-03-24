@@ -1,3 +1,5 @@
 .pio/
+.platformio/
+.venv/
 .vscode/
 .build-tests/

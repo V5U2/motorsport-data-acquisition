@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <Arduino.h>
 #include <FS.h>
 #include <SD.h>
@@ -11,21 +12,21 @@
 class CsvLogger {
  public:
   bool begin(uint8_t chipSelectPin, SPIClass &spi);
-  bool logRow(const Timekeeper &timekeeper,
+  bool logRow(Timekeeper &timekeeper,
               uint32_t uptimeMs,
-              const SensorSnapshot &pressure,
-              const SensorSnapshot &temperature);
+              const std::array<SensorSnapshot, AppConfig::kSensorCount> &sensors);
   void flushIfNeeded(uint32_t uptimeMs);
   bool isReady() const;
   String currentFileName() const;
   String lastError() const;
   String listFilesJson() const;
-  File openReadOnly(const String &userVisibleName) const;
+ File openReadOnly(const String &userVisibleName) const;
 
  private:
-  bool ensureFileOpen(const String &dateStamp);
+  bool ensureFileOpen(const String &dateStamp,
+                      const std::array<SensorSnapshot, AppConfig::kSensorCount> &sensors);
   String normalizeFileName(const String &userVisibleName) const;
-  void writeHeaderIfNeeded();
+  void writeHeaderIfNeeded(const std::array<SensorSnapshot, AppConfig::kSensorCount> &sensors);
 
   bool ready_ = false;
   String currentFileName_;

@@ -12,24 +12,24 @@ bool CsvLogger::begin(const uint8_t chipSelectPin, SPIClass &spi) {
   return true;
 }
 
-bool CsvLogger::logRow(const Timekeeper &timekeeper,
+bool CsvLogger::logRow(Timekeeper &timekeeper,
                        const uint32_t uptimeMs,
-                       const SensorSnapshot &pressure,
-                       const SensorSnapshot &temperature) {
+                       const std::array<SensorSnapshot, AppConfig::kSensorCount> &sensors) {
   if (!ready_) {
     return false;
   }
 
-  if (!ensureFileOpen(timekeeper.dateStamp())) {
+  if (!ensureFileOpen(timekeeper.dateStamp(), sensors)) {
     return false;
   }
 
-  const String row = timekeeper.logTimestamp(uptimeMs) + "," + String(uptimeMs) + "," +
-                     String(pressure.filteredValue, 3) + "," + String(pressure.loopCurrentmA, 3) +
-                     "," + sensorFaultToString(pressure.activeFault) + "," +
-                     String(temperature.filteredValue, 3) + "," +
-                     String(temperature.loopCurrentmA, 3) + "," +
-                     sensorFaultToString(temperature.activeFault) + "\n";
+  String row = timekeeper.logTimestamp(uptimeMs) + "," + String(uptimeMs);
+  for (const SensorSnapshot &sensor : sensors) {
+    row += "," + String(sensor.filteredValue, 3);
+    row += "," + String(sensor.loopCurrentmA, 3);
+    row += "," + String(sensorFaultToString(sensor.activeFault));
+  }
+  row += "\n";
 
   if (file_.print(row) == 0) {
     lastError_ = "CSV write failed";
@@ -103,7 +103,9 @@ File CsvLogger::openReadOnly(const String &userVisibleName) const {
   return SD.open(normalized, FILE_READ);
 }
 
-bool CsvLogger::ensureFileOpen(const String &dateStamp) {
+bool CsvLogger::ensureFileOpen(
+    const String &dateStamp,
+    const std::array<SensorSnapshot, AppConfig::kSensorCount> &sensors) {
   const String desiredName = "/logs-" + dateStamp + ".csv";
   if (file_ && currentFileName_ == desiredName) {
     return true;
@@ -123,7 +125,7 @@ bool CsvLogger::ensureFileOpen(const String &dateStamp) {
 
   currentFileName_ = desiredName;
   if (newFile || file_.size() == 0) {
-    writeHeaderIfNeeded();
+    writeHeaderIfNeeded(sensors);
   }
   return true;
 }
@@ -132,13 +134,19 @@ String CsvLogger::normalizeFileName(const String &userVisibleName) const {
   return String(Logic::normalizeLogFileName(userVisibleName.c_str()).c_str());
 }
 
-void CsvLogger::writeHeaderIfNeeded() {
+void CsvLogger::writeHeaderIfNeeded(
+    const std::array<SensorSnapshot, AppConfig::kSensorCount> &sensors) {
   if (!file_) {
     return;
   }
-  file_.println(
-      "timestamp,uptime_ms,oil_pressure_value,oil_pressure_mA,oil_pressure_fault,oil_temp_value,"
-      "oil_temp_mA,oil_temp_fault");
+
+  String header = "timestamp,uptime_ms";
+  for (const SensorSnapshot &sensor : sensors) {
+    header += "," + String(sensor.id) + "_value";
+    header += "," + String(sensor.id) + "_mA";
+    header += "," + String(sensor.id) + "_fault";
+  }
+  file_.println(header);
   file_.flush();
   lastFlushMs_ = 0;
   rowsSinceFlush_ = 0;

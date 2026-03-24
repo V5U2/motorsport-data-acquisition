@@ -1,9 +1,12 @@
 #pragma once
 
+#include <array>
 #include <Arduino.h>
+#include "AppConfig.h"
 #include "SensorTypes.h"
 
 struct SensorSnapshot {
+  const char *id;
   const char *name;
   const char *units;
   float rawVoltage;
@@ -33,8 +36,7 @@ struct SystemStatus {
 };
 
 struct AppState {
-  SensorSnapshot pressure;
-  SensorSnapshot temperature;
+  std::array<SensorSnapshot, AppConfig::kSensorCount> sensors;
   SystemStatus system;
   uint32_t uptimeMs;
   String timestamp;

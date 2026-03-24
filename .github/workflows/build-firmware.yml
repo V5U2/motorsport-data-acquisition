@@ -1,0 +1,56 @@
+name: Build Firmware
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-firmware:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: ${{ runner.os }}-platformio-${{ hashFiles('platformio.ini') }}
+          restore-keys: |
+            ${{ runner.os }}-platformio-
+
+      - name: Install PlatformIO Core
+        run: pip install platformio
+
+      - name: Build firmware
+        run: pio run
+
+      - name: Prepare firmware artifacts
+        run: |
+          mkdir -p dist
+          cp .pio/build/esp32s3-devkitc-1/firmware.bin dist/motorsport-data-acquisition-firmware.bin
+          cp .pio/build/esp32s3-devkitc-1/bootloader.bin dist/motorsport-data-acquisition-bootloader.bin
+          cp .pio/build/esp32s3-devkitc-1/partitions.bin dist/motorsport-data-acquisition-partitions.bin
+          cp .pio/build/esp32s3-devkitc-1/firmware.elf dist/motorsport-data-acquisition-firmware.elf
+
+      - name: Upload firmware artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-esp32s3-devkitc-1
+          path: dist/*
+          if-no-files-found: error

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <array>
 #include <Arduino.h>
 #include "PinDefinitions.h"
 
@@ -10,6 +11,7 @@ constexpr uint8_t kAds1115Address = 0x48;
 constexpr uint8_t kDs3231Address = 0x68;
 
 struct SensorConfig {
+  const char *id;
   const char *name;
   uint8_t adsChannel;
   float currentMinmA;
@@ -78,31 +80,36 @@ inline constexpr PinConfig kPins{
     PIN_UI_BUTTON,
 };
 
-inline constexpr SensorConfig kOilPressureConfig{
-    "Oil Pressure",
-    0,
-    4.0f,
-    20.0f,
-    0.0f,
-    10.0f,
-    "bar",
-    1.5f,
-    8.5f,
-    0.18f,
-};
+inline constexpr std::array<SensorConfig, 2> kSensorConfigs{{
+    {
+        "oil_pressure",
+        "Oil Pressure",
+        0,
+        4.0f,
+        20.0f,
+        0.0f,
+        10.0f,
+        "bar",
+        1.5f,
+        8.5f,
+        0.18f,
+    },
+    {
+        "oil_temperature",
+        "Oil Temp",
+        1,
+        4.0f,
+        20.0f,
+        0.0f,
+        150.0f,
+        "C",
+        70.0f,
+        125.0f,
+        0.18f,
+    },
+}};
 
-inline constexpr SensorConfig kOilTemperatureConfig{
-    "Oil Temp",
-    1,
-    4.0f,
-    20.0f,
-    0.0f,
-    150.0f,
-    "C",
-    70.0f,
-    125.0f,
-    0.18f,
-};
+inline constexpr size_t kSensorCount = kSensorConfigs.size();
 
 inline constexpr TimingConfig kTiming{
     10,
