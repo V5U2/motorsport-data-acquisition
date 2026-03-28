@@ -1,5 +1,7 @@
 .pio/
 .platformio/
 .venv/
+.snyk-cache/
+.snyk-home/
 .vscode/
 .build-tests/
