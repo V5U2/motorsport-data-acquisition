@@ -5,7 +5,7 @@ ESP32-S3 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logge
 GitHub releases use Semantic Versioning with `release-please`, and commits should follow Conventional Commits such as `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `build:`, and `ci:`.
 
 ## Features
-- Reads a configurable set of 4-20 mA sensors through an ADS1115 and 165 ohm shunts
+- Reads a configurable set of 4-20 mA sensors through an ADS1115-based analog front end
 - Displays live gauges and diagnostics on a 480x320 SPI TFT
 - Logs CSV data to microSD with DS3231 RTC timestamps
 - Serves a lightweight Wi-Fi dashboard and CSV download endpoints
@@ -13,56 +13,32 @@ GitHub releases use Semantic Versioning with `release-please`, and commits shoul
 
 ## Required hardware
 
-### Core bill of materials
+This project is documented around a module-first build so the analog front end and power chain use off-the-shelf parts wherever practical.
+
+### Off-the-shelf bill of materials
 
 | Qty | Item | Notes |
 | --- | --- | --- |
-| 1 | ESP32-S3 DevKitC-1 class board | Main controller supported by [`platformio.ini`](platformio.ini) and the default pin map |
-| 1 | 3.5 inch 480x320 SPI TFT with ST7796S controller | Main dashboard display; update [`include/TFT_Setup.h`](include/TFT_Setup.h) if the panel/controller differs |
-| 1 | ADS1115 breakout | Two-channel analog front end for the 4-20 mA shunt measurements |
-| 1 | DS3231 RTC module with backup coin cell | Provides persistent timestamps for CSV logging |
-| 1 | microSD card | Log storage |
-| 1 | microSD breakout or integrated SD socket | Needed only if the chosen TFT does not already include SD hardware |
-| 2 | 4-20 mA transmitters | One oil pressure sensor and one oil temperature sensor |
-| 2 | 165 ohm 0.1% shunt resistors, minimum 0.125 W | Converts 4-20 mA loops to ADC voltage input |
-| 2 | 100 ohm series resistors | Recommended input filtering/protection at ADS1115 A0 and A1 |
-| 2 | 0.1 uF capacitors | Input RC filter capacitors for the ADS1115 channels |
-| 1 | Momentary push button | UI screen switch and fault clear input |
-| 1 | Inline fuse and holder | Protects the vehicle-side 12 V feed |
-| 1 | Reverse-polarity protection stage | Automotive survivability on the power input |
-| 1 | Automotive TVS diode | Load-dump and transient suppression on the 12 V input |
-| 1 | 12 V to 5 V buck converter | Supplies the ESP32, TFT, ADC, and RTC from vehicle power |
-| 1 | Enclosure and wiring set | Connectors, terminals, mounting hardware, and harness materials |
-
-### Simplified bill of materials
-
-| Qty | Item | Notes |
-| --- | --- | --- |
-| 1 | ESP32-S3 DevKitC-1 class board | Main controller supported by [`platformio.ini`](platformio.ini) and the default pin map |
-| 1 | 3.5 inch 480x320 SPI TFT with ST7796S controller | Main dashboard display; update [`include/TFT_Setup.h`](include/TFT_Setup.h) if the panel/controller differs |
-| 1 | ADS1115 breakout | Keep this if the 4-20 mA receiver modules expose analog voltage outputs |
-| 1 | DS3231 RTC module with backup coin cell | Provides persistent timestamps for CSV logging |
-| 1 | microSD card | Log storage |
-| 1 | microSD breakout or integrated SD socket | Needed only if the chosen TFT does not already include SD hardware |
-| 2 | 4-20 mA transmitters | One oil pressure sensor and one oil temperature sensor |
-| 2 | 4-20 mA receiver/current-to-voltage modules | Replaces the discrete shunts and RC input filter network |
-| 1 | Momentary push button | UI screen switch and fault clear input |
-| 1 | Inline fuse and holder | Protects the vehicle-side 12 V feed |
-| 1 | Reverse-polarity protection stage | Automotive survivability on the power input |
-| 1 | Automotive TVS diode | Load-dump and transient suppression on the 12 V input |
-| 1 | 12 V to 5 V buck converter | Supplies the ESP32, TFT, ADC, RTC, and loop interface hardware |
-| 1 | Enclosure and wiring set | Connectors, terminals, mounting hardware, and harness materials |
+| 1 | [ESP32-S3 DevKitC-1 class board](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/index.html) | Main controller supported by [`platformio.ini`](platformio.ini) and the default pin map |
+| 1 | [3.5 inch 480x320 SPI TFT with ST7796S controller](https://www.waveshare.com/3.5inch-capacitive-touch-lcd.htm) | Main dashboard display; a version with an integrated microSD socket is preferred |
+| 1 | [ADS1115 breakout](https://www.adafruit.com/product/1085) | External ADC used to read the sensor-interface module outputs |
+| 1 | [DS3231 RTC module with backup coin cell](https://www.adafruit.com/product/5188) | Provides persistent timestamps for CSV logging |
+| 1 | [microSD breakout or integrated SD socket](https://www.adafruit.com/product/254) | Needed only if the chosen TFT does not already include SD hardware; removable media is not listed as part of the core system BOM |
+| 2 | [4-20 mA receiver/current-to-voltage modules](https://www.dfrobot.com/product-1755.html) | One module per sensor channel; this replaces the custom shunt/filter front end |
+| 1 | [Momentary push button](https://www.adafruit.com/product/471) | UI screen switch and fault clear input |
+| 1 | [Fused 12 V input path](https://www.bluesea.com/products/5064/) | Inline fuse holder or a prebuilt fused automotive input lead |
+| 1 | [12 V reverse-polarity/transient protection module](https://www.pololu.com/product/5380) | Preferred over building the protection stage from discrete parts |
+| 1 | [12 V to 5 V buck converter module](https://www.pololu.com/product/2851) | Supplies the ESP32, TFT, ADC, RTC, and loop interface hardware |
+| 1 | [Enclosure and wiring set](https://www.polycase.com/general-use-enclosures) | Connectors, terminals, mounting hardware, and harness materials |
 
 ### Integration notes
 - The firmware sensor list is defined in [`include/AppConfig.h`](include/AppConfig.h), so future channels can be added there without changing the overall project structure.
 - The default wiring and pin map are documented in [`docs/hardware-setup.md`](docs/hardware-setup.md) and [`include/PinDefinitions.h`](include/PinDefinitions.h).
+- A practical module for each 4-20 mA channel is the [DFRobot Gravity Analog Current to Voltage Converter](https://www.dfrobot.com/product-1755.html).
+- External 4-20 mA transmitters are treated as field devices feeding the logger, not part of the logger BOM.
+- The logger expects removable microSD media at runtime, but the card itself is treated as consumable media rather than a BOM line item.
 - If the TFT controller, ESP32 pinout, or storage wiring differs from the defaults, update the hardware definitions before flashing.
-
-### Easier 4-20 mA option
-- Instead of building the current-loop receiver front end from discrete shunts, RC filters, and protection parts, you can use two ready-made 4-20 mA receiver/converter modules.
-- A practical hobby/prototyping option is the [DFRobot Gravity Analog Current to Voltage Converter](https://www.dfrobot.com/product-1755.html/), one module per sensor channel.
-- With receiver modules, the `165 ohm` shunts and the recommended per-channel filter parts are typically no longer needed on your carrier wiring because that analog conditioning moves onto the module.
-- If you choose a module-based front end, re-check the channel scaling in [`include/AppConfig.h`](include/AppConfig.h) so the firmware matches the module output range rather than the raw shunt-voltage calculation.
+- Re-check the channel scaling in [`include/AppConfig.h`](include/AppConfig.h) so the firmware matches the output range of the chosen 4-20 mA receiver module.
 
 ## Project layout
 - [`platformio.ini`](platformio.ini)
