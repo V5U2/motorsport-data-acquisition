@@ -2,6 +2,16 @@
 
 #include "Logic.h"
 
+void CsvLogger::disable() {
+  ready_ = false;
+  currentFileName_ = "";
+  lastError_ = "microSD logging disabled";
+  if (file_) {
+    file_.flush();
+    file_.close();
+  }
+}
+
 bool CsvLogger::begin(const uint8_t chipSelectPin, SPIClass &spi) {
   ready_ = SD.begin(chipSelectPin, spi, 25000000);
   if (!ready_) {
@@ -16,6 +26,9 @@ bool CsvLogger::logRow(Timekeeper &timekeeper,
                        const uint32_t uptimeMs,
                        const std::array<SensorSnapshot, AppConfig::kSensorCount> &sensors) {
   if (!ready_) {
+    if (lastError_.isEmpty()) {
+      lastError_ = "microSD logging disabled";
+    }
     return false;
   }
 

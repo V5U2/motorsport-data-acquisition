@@ -2,8 +2,6 @@
 
 ESP32-S3 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and dashboard.
 
-GitHub releases use Semantic Versioning with `release-please`, and commits should follow Conventional Commits such as `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`, `build:`, and `ci:`.
-
 ## Features
 - Reads a configurable set of 4-20 mA sensors through an ADS1115-based analog front end
 - Displays live gauges and diagnostics on a 480x320 SPI TFT
@@ -13,30 +11,36 @@ GitHub releases use Semantic Versioning with `release-please`, and commits shoul
 
 ## Required hardware
 
-This project is documented around a module-first build so the analog front end and power chain use off-the-shelf parts wherever practical.
+This project is documented around a module-first build so the analog front end and power chain use off-the-shelf parts wherever practical. The core logger only needs the controller, ADC, sensor-interface modules, power hardware, and button. The TFT, RTC, and SD logging hardware are optional additions that can be enabled in software when fitted.
 
-### Off-the-shelf bill of materials
+### Core bill of materials
 
 | Qty | Item | Notes |
 | --- | --- | --- |
-| 1 | [ESP32-S3 DevKitC-1 class board](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-devkitc-1/index.html) | Main controller supported by [`platformio.ini`](platformio.ini) and the default pin map |
-| 1 | [3.5 inch 480x320 SPI TFT with ST7796S controller](https://www.waveshare.com/3.5inch-capacitive-touch-lcd.htm) | Main dashboard display; a version with an integrated microSD socket is preferred |
-| 1 | [ADS1115 breakout](https://www.adafruit.com/product/1085) | External ADC used to read the sensor-interface module outputs |
-| 1 | [DS3231 RTC module with backup coin cell](https://www.adafruit.com/product/5188) | Provides persistent timestamps for CSV logging |
-| 1 | [microSD breakout or integrated SD socket](https://www.adafruit.com/product/254) | Needed only if the chosen TFT does not already include SD hardware; removable media is not listed as part of the core system BOM |
-| 2 | [4-20 mA receiver/current-to-voltage modules](https://www.dfrobot.com/product-1755.html) | One module per sensor channel; this replaces the custom shunt/filter front end |
-| 1 | [Momentary push button](https://www.adafruit.com/product/471) | UI screen switch and fault clear input |
+| 1 | [ESP32-S3 DevKitC-1 class board](https://www.digikey.com/en/products/detail/espressif-systems/ESP32-S3-DEVKITC-1-N8/15199021) | Main controller supported by [`platformio.ini`](platformio.ini) and the default pin map |
+| 1 | [ADS1115 breakout](https://www.digikey.com/en/products/detail/adafruit-industries-llc/1085/5761229) | External ADC used to read the sensor-interface module outputs |
+| 2 | [4-20 mA receiver/current-to-voltage modules](https://www.digikey.com/en/products/detail/dfrobot/SEN0262/9559248) | One module per sensor channel; this replaces the custom shunt/filter front end |
+| 1 | [Momentary push button](https://www.digikey.com/en/products/detail/adafruit-industries-llc/471/7349483) | UI screen switch and fault clear input |
 | 1 | [Fused 12 V input path](https://www.bluesea.com/products/5064/) | Inline fuse holder or a prebuilt fused automotive input lead |
 | 1 | [12 V reverse-polarity/transient protection module](https://www.pololu.com/product/5380) | Preferred over building the protection stage from discrete parts |
-| 1 | [12 V to 5 V buck converter module](https://www.pololu.com/product/2851) | Supplies the ESP32, TFT, ADC, RTC, and loop interface hardware |
-| 1 | [Enclosure and wiring set](https://www.polycase.com/general-use-enclosures) | Connectors, terminals, mounting hardware, and harness materials |
+| 1 | [12 V to 5 V buck converter module](https://www.digikey.com/en/products/detail/pololu/2851/10451177) | Supplies the ESP32, TFT, ADC, RTC, and loop interface hardware |
+| 1 | [Enclosure and wiring set](https://www.printables.com/tag/projectbox) | Printed or purchased enclosure, plus connectors, terminals, mounting hardware, and harness materials |
+
+### Optional additions
+
+| Qty | Item | Notes |
+| --- | --- | --- |
+| 1 | [3.5 inch 480x320 SPI TFT with ST7796S controller](https://www.waveshare.com/3.5inch-capacitive-touch-lcd.htm) | Optional local dashboard display; if omitted, disable `displayEnabled` in [`include/AppConfig.h`](include/AppConfig.h) |
+| 1 | [DS3231 RTC module with backup coin cell](https://www.digikey.com/en/products/detail/adafruit-industries-llc/5188/15189155) | Optional real-time clock for persistent timestamps; if omitted, disable `rtcEnabled` and the firmware falls back to uptime-based timestamps |
+| 1 | [microSD breakout or integrated SD socket](https://www.digikey.com/en/products/detail/adafruit-industries-llc/254/5761230) | Optional CSV logging hardware; if omitted, disable `sdLoggingEnabled` and the logger runs without on-device file storage |
 
 ### Integration notes
+- Enable or disable the optional TFT, RTC, and SD logging hardware in [`include/AppConfig.h`](include/AppConfig.h) via `kFeatures`.
 - The firmware sensor list is defined in [`include/AppConfig.h`](include/AppConfig.h), so future channels can be added there without changing the overall project structure.
 - The default wiring and pin map are documented in [`docs/hardware-setup.md`](docs/hardware-setup.md) and [`include/PinDefinitions.h`](include/PinDefinitions.h).
-- A practical module for each 4-20 mA channel is the [DFRobot Gravity Analog Current to Voltage Converter](https://www.dfrobot.com/product-1755.html).
+- A practical module for each 4-20 mA channel is the [DFRobot Gravity Analog Current to Voltage Converter](https://www.digikey.com/en/products/detail/dfrobot/SEN0262/9559248).
 - External 4-20 mA transmitters are treated as field devices feeding the logger, not part of the logger BOM.
-- The logger expects removable microSD media at runtime, but the card itself is treated as consumable media rather than a BOM line item.
+- If SD logging hardware is installed, the logger expects removable microSD media at runtime, but the card itself is treated as consumable media rather than a BOM line item.
 - If the TFT controller, ESP32 pinout, or storage wiring differs from the defaults, update the hardware definitions before flashing.
 - Re-check the channel scaling in [`include/AppConfig.h`](include/AppConfig.h) so the firmware matches the output range of the chosen 4-20 mA receiver module.
 
@@ -49,7 +53,7 @@ This project is documented around a module-first build so the analog front end a
 ## Build and flash
 1. Install PlatformIO Core or use the PlatformIO VS Code extension.
 2. Review the pin mapping in [`include/PinDefinitions.h`](include/PinDefinitions.h) and update it for the actual ESP32-S3 dev board and TFT used.
-3. Review sensor ranges, Wi-Fi credentials, and timing values in [`include/AppConfig.h`](include/AppConfig.h).
+3. Review sensor ranges, Wi-Fi credentials, timing values, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h).
 4. Build and upload with `pio run -t upload`.
 5. Open the serial monitor with `pio device monitor`.
 
@@ -57,12 +61,6 @@ This project is documented around a module-first build so the analog front end a
 - Run `./scripts/run-host-tests.sh` to execute hardware-independent logic tests on a desktop machine.
 - These tests cover sensor current conversion, threshold faults, engineering-value clamping, filter behavior, RTC/fallback timestamp formatting, and log filename sanitization edge cases.
 - GitHub Actions is configured to run the same host test suite on pushes and pull requests in [host-tests.yml](.github/workflows/host-tests.yml).
-
-## Release process
-1. Merge changes into `main` using Conventional Commit-style messages such as `feat:`, `fix:`, or `docs:`.
-2. The [`release-please`](.github/workflows/release-please.yml) workflow updates or opens a release PR based on those commits.
-3. When that release PR is merged, `release-please` creates the next `v*` tag and GitHub release.
-4. The [`release-firmware`](.github/workflows/release.yml) workflow rebuilds the firmware for that tag and attaches the generated binaries to the GitHub release.
 
 ## Runtime controls
 - Short press the UI button to switch between the main gauge screen and the diagnostics screen.

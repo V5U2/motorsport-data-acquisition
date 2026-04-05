@@ -11,6 +11,7 @@
 
 class CsvLogger {
  public:
+  void disable();
   bool begin(uint8_t chipSelectPin, SPIClass &spi);
   bool logRow(Timekeeper &timekeeper,
               uint32_t uptimeMs,

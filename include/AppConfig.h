@@ -46,6 +46,12 @@ struct WifiConfig {
   uint8_t connectTimeoutSeconds;
 };
 
+struct FeatureConfig {
+  bool displayEnabled;
+  bool rtcEnabled;
+  bool sdLoggingEnabled;
+};
+
 struct PinConfig {
   uint8_t i2cSda;
   uint8_t i2cScl;
@@ -126,6 +132,12 @@ inline constexpr WifiConfig kWifi{
     "",
     "",
     10,
+};
+
+inline constexpr FeatureConfig kFeatures{
+    true,
+    true,
+    true,
 };
 
 inline constexpr DisplayConfig kDisplay{
