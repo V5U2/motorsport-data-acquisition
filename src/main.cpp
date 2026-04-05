@@ -78,7 +78,10 @@ AppState buildState() {
   state.uptimeMs = millis();
   state.timestamp = timekeeper.logTimestamp(state.uptimeMs);
   state.system.adcReady = adcReady;
+  state.system.displayEnabled = AppConfig::kFeatures.displayEnabled;
+  state.system.rtcEnabled = AppConfig::kFeatures.rtcEnabled;
   state.system.rtcReady = rtcReady;
+  state.system.sdEnabled = AppConfig::kFeatures.sdLoggingEnabled;
   state.system.sdReady = csvLogger.isReady() && csvLogger.lastError().isEmpty();
   state.system.wifiReady = wifiReady;
   state.system.wifiMode = webUi.modeString();
@@ -102,10 +105,14 @@ void setup() {
   Serial.begin(115200);
 
   pinMode(AppConfig::kPins.buttonPin, INPUT_PULLUP);
-  pinMode(AppConfig::kPins.tftCs, OUTPUT);
-  pinMode(AppConfig::kPins.sdCs, OUTPUT);
-  digitalWrite(AppConfig::kPins.tftCs, HIGH);
-  digitalWrite(AppConfig::kPins.sdCs, HIGH);
+  if (AppConfig::kFeatures.displayEnabled) {
+    pinMode(AppConfig::kPins.tftCs, OUTPUT);
+    digitalWrite(AppConfig::kPins.tftCs, HIGH);
+  }
+  if (AppConfig::kFeatures.sdLoggingEnabled) {
+    pinMode(AppConfig::kPins.sdCs, OUTPUT);
+    digitalWrite(AppConfig::kPins.sdCs, HIGH);
+  }
 
   Wire.begin(AppConfig::kPins.i2cSda, AppConfig::kPins.i2cScl);
   spiBus.begin(AppConfig::kPins.spiSclk, AppConfig::kPins.spiMiso, AppConfig::kPins.spiMosi);
@@ -118,8 +125,18 @@ void setup() {
     ads.setDataRate(RATE_ADS1115_860SPS);
   }
 
-  rtcReady = timekeeper.begin(Wire);
-  csvLogger.begin(AppConfig::kPins.sdCs, spiBus);
+  if (AppConfig::kFeatures.rtcEnabled) {
+    rtcReady = timekeeper.begin(Wire);
+  } else {
+    timekeeper.disable();
+    rtcReady = false;
+  }
+
+  if (AppConfig::kFeatures.sdLoggingEnabled) {
+    csvLogger.begin(AppConfig::kPins.sdCs, spiBus);
+  } else {
+    csvLogger.disable();
+  }
   wifiReady = webUi.begin(AppConfig::kWifi, csvLogger);
 
   sampleSensors();
@@ -141,7 +158,7 @@ void loop() {
 
   if ((nowMs - lastLogMs) >= AppConfig::kTiming.loggingIntervalMs) {
     AppState state = buildState();
-    if (csvLogger.isReady()) {
+    if (AppConfig::kFeatures.sdLoggingEnabled && csvLogger.isReady()) {
       if (csvLogger.logRow(timekeeper, state.uptimeMs, state.sensors)) {
         csvLogger.flushIfNeeded(state.uptimeMs);
       }

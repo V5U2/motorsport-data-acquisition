@@ -13,6 +13,7 @@ class Dashboard {
   };
 
   bool begin();
+  bool isReady() const;
   void render(const AppState &state);
   void nextScreen();
  Screen currentScreen() const;

@@ -107,7 +107,10 @@ String WebUi::liveJson() const {
   json += "],";
   json += "\"system\":{";
   json += "\"adc_ready\":" + String(state_.system.adcReady ? "true" : "false") + ",";
+  json += "\"display_enabled\":" + String(state_.system.displayEnabled ? "true" : "false") + ",";
+  json += "\"rtc_enabled\":" + String(state_.system.rtcEnabled ? "true" : "false") + ",";
   json += "\"rtc_ready\":" + String(state_.system.rtcReady ? "true" : "false") + ",";
+  json += "\"sd_enabled\":" + String(state_.system.sdEnabled ? "true" : "false") + ",";
   json += "\"sd_ready\":" + String(state_.system.sdReady ? "true" : "false") + ",";
   json += "\"wifi_ready\":" + String(state_.system.wifiReady ? "true" : "false") + ",";
   json += "\"wifi_mode\":\"" + state_.system.wifiMode + "\",";
@@ -184,8 +187,8 @@ String WebUi::indexHtml() const {
         document.getElementById('sensor-fault-' + sensor.id).textContent = sensor.fault;
       });
       document.getElementById('adcStatus').textContent = data.system.adc_ready ? 'OK' : 'FAULT';
-      document.getElementById('rtcStatus').textContent = data.system.rtc_ready ? 'OK' : 'FAULT';
-      document.getElementById('sdStatus').textContent = data.system.sd_ready ? 'OK' : 'FAULT';
+      document.getElementById('rtcStatus').textContent = data.system.rtc_enabled ? (data.system.rtc_ready ? 'OK' : 'FAULT') : 'DISABLED';
+      document.getElementById('sdStatus').textContent = data.system.sd_enabled ? (data.system.sd_ready ? 'OK' : 'FAULT') : 'DISABLED';
       document.getElementById('wifiStatus').textContent = data.system.wifi_mode + ' ' + data.system.ip_address;
       document.getElementById('logFile').textContent = data.system.current_log_file || '--';
     }

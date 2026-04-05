@@ -24,6 +24,11 @@ float mapRange(const float value,
 }  // namespace
 
 bool Dashboard::begin() {
+  if (!AppConfig::kFeatures.displayEnabled) {
+    ready_ = false;
+    return false;
+  }
+
   tft_.init();
   tft_.setRotation(AppConfig::kDisplay.rotation);
   tft_.fillScreen(AppConfig::kDisplay.backgroundColor);
@@ -37,6 +42,8 @@ bool Dashboard::begin() {
   ready_ = true;
   return true;
 }
+
+bool Dashboard::isReady() const { return ready_; }
 
 void Dashboard::render(const AppState &state) {
   if (!ready_) {
@@ -52,6 +59,10 @@ void Dashboard::render(const AppState &state) {
 }
 
 void Dashboard::nextScreen() {
+  if (!ready_) {
+    return;
+  }
+
   if (screen_ == Screen::Main) {
     screen_ = Screen::Diagnostics;
     diagnosticsPage_ = 0;
@@ -142,10 +153,13 @@ void Dashboard::drawDiagnosticsScreen(const AppState &state) {
 
   drawStatusLine(20, 60, "Log file", state.system.currentLogFile, TFT_CYAN);
   drawStatusLine(20, 84, "Wi-Fi", state.system.wifiMode + " " + state.system.ipAddress, TFT_GREEN);
-  drawStatusLine(20, 108, "RTC", state.system.rtcReady ? "OK" : "FAULT",
-                 state.system.rtcReady ? TFT_GREEN : TFT_RED);
-  drawStatusLine(20, 132, "SD", state.system.sdReady ? "OK" : state.system.lastLogError,
-                 state.system.sdReady ? TFT_GREEN : TFT_RED);
+  drawStatusLine(20, 108, "RTC",
+                 state.system.rtcEnabled ? (state.system.rtcReady ? "OK" : "FAULT") : "DISABLED",
+                 state.system.rtcEnabled ? (state.system.rtcReady ? TFT_GREEN : TFT_RED) : TFT_LIGHTGREY);
+  drawStatusLine(20, 132, "SD",
+                 state.system.sdEnabled ? (state.system.sdReady ? "OK" : state.system.lastLogError)
+                                        : "DISABLED",
+                 state.system.sdEnabled ? (state.system.sdReady ? TFT_GREEN : TFT_RED) : TFT_LIGHTGREY);
   drawStatusLine(20, 156, "ADC", state.system.adcReady ? "OK" : "FAULT",
                  state.system.adcReady ? TFT_GREEN : TFT_RED);
 

@@ -5,6 +5,7 @@
 
 class Timekeeper {
  public:
+  void disable();
   bool begin(TwoWire &wire);
   bool isReady() const;
   String logTimestamp(uint32_t uptimeMs);

@@ -26,7 +26,10 @@ struct SensorSnapshot {
 
 struct SystemStatus {
   bool adcReady;
+  bool displayEnabled;
+  bool rtcEnabled;
   bool rtcReady;
+  bool sdEnabled;
   bool sdReady;
   bool wifiReady;
   String wifiMode;

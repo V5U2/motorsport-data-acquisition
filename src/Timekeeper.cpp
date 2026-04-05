@@ -2,6 +2,11 @@
 
 #include "Logic.h"
 
+void Timekeeper::disable() {
+  ready_ = false;
+  lastError_ = "RTC disabled";
+}
+
 bool Timekeeper::begin(TwoWire &wire) {
   if (!rtc_.begin(&wire)) {
     ready_ = false;
