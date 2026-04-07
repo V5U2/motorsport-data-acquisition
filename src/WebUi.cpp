@@ -113,9 +113,15 @@ String WebUi::liveJson() const {
   json += "\"sd_enabled\":" + String(state_.system.sdEnabled ? "true" : "false") + ",";
   json += "\"sd_ready\":" + String(state_.system.sdReady ? "true" : "false") + ",";
   json += "\"wifi_ready\":" + String(state_.system.wifiReady ? "true" : "false") + ",";
+  json += "\"upload_enabled\":" + String(state_.system.uploadEnabled ? "true" : "false") + ",";
+  json += "\"upload_connected\":" + String(state_.system.uploadConnected ? "true" : "false") + ",";
   json += "\"wifi_mode\":\"" + state_.system.wifiMode + "\",";
   json += "\"ip_address\":\"" + state_.system.ipAddress + "\",";
-  json += "\"current_log_file\":\"" + state_.system.currentLogFile + "\"}}";
+  json += "\"current_log_file\":\"" + state_.system.currentLogFile + "\",";
+  json += "\"upload_protocol\":\"" + state_.system.uploadProtocol + "\",";
+  json += "\"upload_session_id\":\"" + state_.system.uploadSessionId + "\",";
+  json += "\"upload_sequence\":" + String(state_.system.lastUploadSequence) + ",";
+  json += "\"last_upload_error\":\"" + state_.system.lastUploadError + "\"}}";
   return json;
 }
 
@@ -168,6 +174,7 @@ String WebUi::indexHtml() const {
       <div class="status"><span>ADC</span><span id="adcStatus">--</span></div>
       <div class="status"><span>RTC</span><span id="rtcStatus">--</span></div>
       <div class="status"><span>SD</span><span id="sdStatus">--</span></div>
+      <div class="status"><span>Upload</span><span id="uploadStatus">--</span></div>
       <div class="status"><span>Wi-Fi</span><span id="wifiStatus">--</span></div>
       <div class="status"><span>Log file</span><span id="logFile">--</span></div>
     </div>
@@ -189,6 +196,7 @@ String WebUi::indexHtml() const {
       document.getElementById('adcStatus').textContent = data.system.adc_ready ? 'OK' : 'FAULT';
       document.getElementById('rtcStatus').textContent = data.system.rtc_enabled ? (data.system.rtc_ready ? 'OK' : 'FAULT') : 'DISABLED';
       document.getElementById('sdStatus').textContent = data.system.sd_enabled ? (data.system.sd_ready ? 'OK' : 'FAULT') : 'DISABLED';
+      document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? 'MQTT LIVE' : 'WAITING') : 'DISABLED';
       document.getElementById('wifiStatus').textContent = data.system.wifi_mode + ' ' + data.system.ip_address;
       document.getElementById('logFile').textContent = data.system.current_log_file || '--';
     }

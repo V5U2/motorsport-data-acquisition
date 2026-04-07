@@ -5,3 +5,4 @@
 .snyk-home/
 .vscode/
 .build-tests/
+.omx/

@@ -122,4 +122,56 @@ std::string normalizeLogFileName(std::string_view rawName) {
   return candidate;
 }
 
+std::string normalizeTopicSegment(std::string_view rawSegment) {
+  std::string trimmed = trimWhitespace(rawSegment);
+  std::string normalized;
+  normalized.reserve(trimmed.size());
+
+  for (const char ch : trimmed) {
+    const unsigned char value = static_cast<unsigned char>(ch);
+    if (std::isalnum(value) != 0 || ch == '-' || ch == '_') {
+      normalized.push_back(static_cast<char>(std::tolower(value)));
+    } else if (ch == ' ' || ch == '/' || ch == '.') {
+      if (normalized.empty() || normalized.back() == '-') {
+        continue;
+      }
+      normalized.push_back('-');
+    }
+  }
+
+  while (!normalized.empty() && normalized.back() == '-') {
+    normalized.pop_back();
+  }
+
+  return normalized;
+}
+
+std::string formatUploadTopic(std::string_view prefix, std::string_view deviceId, std::string_view leaf) {
+  std::string normalizedPrefix = trimWhitespace(prefix);
+  while (!normalizedPrefix.empty() && normalizedPrefix.front() == '/') {
+    normalizedPrefix.erase(normalizedPrefix.begin());
+  }
+  while (!normalizedPrefix.empty() && normalizedPrefix.back() == '/') {
+    normalizedPrefix.pop_back();
+  }
+
+  const std::string normalizedDevice = normalizeTopicSegment(deviceId);
+  const std::string normalizedLeaf = normalizeTopicSegment(leaf);
+
+  std::string topic = normalizedPrefix.empty() ? std::string("motorsport") : normalizedPrefix;
+  if (!normalizedDevice.empty()) {
+    topic += "/" + normalizedDevice;
+  }
+  if (!normalizedLeaf.empty()) {
+    topic += "/" + normalizedLeaf;
+  }
+  return topic;
+}
+
+std::string formatSessionId(std::string_view deviceId, const uint32_t bootCounter) {
+  const std::string normalizedDevice = normalizeTopicSegment(deviceId);
+  const std::string prefix = normalizedDevice.empty() ? "logger" : normalizedDevice;
+  return prefix + "-boot-" + std::to_string(bootCounter);
+}
+
 }  // namespace Logic

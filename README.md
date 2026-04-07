@@ -7,6 +7,7 @@ ESP32-S3 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logge
 - Displays live gauges and diagnostics on a 480x320 SPI TFT
 - Logs CSV data to microSD with DS3231 RTC timestamps
 - Serves a lightweight Wi-Fi dashboard and CSV download endpoints
+- Publishes live telemetry over MQTT when station Wi-Fi and broker settings are configured
 - Keeps pin mapping, sensor calibration, and refresh rates in one config file
 
 ## Required hardware
@@ -36,6 +37,7 @@ This project is documented around a module-first build so the analog front end a
 
 ### Integration notes
 - Enable or disable the optional TFT, RTC, and SD logging hardware in [`include/AppConfig.h`](include/AppConfig.h) via `kFeatures`.
+- Live MQTT upload is also controlled in [`include/AppConfig.h`](include/AppConfig.h) via `kFeatures.liveUploadEnabled` and `kLiveUpload`.
 - The firmware sensor list is defined in [`include/AppConfig.h`](include/AppConfig.h), so future channels can be added there without changing the overall project structure.
 - The default wiring and pin map are documented in [`docs/hardware-setup.md`](docs/hardware-setup.md) and [`include/PinDefinitions.h`](include/PinDefinitions.h).
 - A practical module for each 4-20 mA channel is the [DFRobot Gravity Analog Current to Voltage Converter](https://www.digikey.com/en/products/detail/dfrobot/SEN0262/9559248).
@@ -47,15 +49,81 @@ This project is documented around a module-first build so the analog front end a
 ## Project layout
 - [`platformio.ini`](platformio.ini)
 - [`include/AppConfig.h`](include/AppConfig.h)
+- [`include/LiveUpload.h`](include/LiveUpload.h)
 - [`src/main.cpp`](src/main.cpp)
+- [`src/LiveUpload.cpp`](src/LiveUpload.cpp)
 - [`docs/hardware-setup.md`](docs/hardware-setup.md)
 
 ## Build and flash
 1. Install PlatformIO Core or use the PlatformIO VS Code extension.
 2. Review the pin mapping in [`include/PinDefinitions.h`](include/PinDefinitions.h) and update it for the actual ESP32-S3 dev board and TFT used.
-3. Review sensor ranges, Wi-Fi credentials, timing values, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h).
+3. Review sensor ranges, Wi-Fi credentials, timing values, live upload settings, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h).
 4. Build and upload with `pio run -t upload`.
 5. Open the serial monitor with `pio device monitor`.
+
+## Live streaming
+
+The firmware now includes a live telemetry publisher for near-real-time upload. The current implementation uses MQTT for the live path and is disabled by default. Enable it in [`include/AppConfig.h`](include/AppConfig.h), switch Wi-Fi to station mode, and set the MQTT broker details in `kLiveUpload`.
+
+Current behavior:
+- The device publishes live sensor snapshots to MQTT on a fixed interval.
+- Each message includes a normalized `device_id`, a per-boot `session_id`, a monotonic `sequence`, the current timestamp, and the current sensor values.
+- The retained MQTT status topic now reflects both online and offline state so downstream consumers do not keep stale liveness.
+- The firmware exposes live upload state through the local web UI and `/api/live`.
+- Local SD logging remains the durable on-device record when SD logging is enabled.
+
+Current limits:
+- This repository currently implements the MQTT live stream only.
+- HTTP backlog upload and store-and-forward replay are not implemented yet.
+- For motorsport use with spotty connectivity, the intended next step is an HTTP batch uploader that drains unsent SD log segments after connectivity returns.
+
+Mermaid overview:
+
+```mermaid
+flowchart LR
+    A["4-20 mA Sensors"] --> B["ESP32-S3 Firmware"]
+    B --> C["ADS1115 Sampling"]
+    C --> D["App State"]
+    D --> E["TFT Dashboard (Optional)"]
+    D --> F["Web UI / Local API"]
+    D --> G["CSV Logger (Optional SD)"]
+    D --> H["MQTT Live Upload"]
+    H --> I["MQTT Broker"]
+    I --> J["Realtime Dashboards / Alerts / Stream Processing"]
+    G --> K["HTTP Backlog Upload (Planned)"]
+    K --> L["Server-side Session Store / Analytics"]
+```
+
+Recommended configuration model:
+- Use MQTT for low-latency live telemetry.
+- Keep SD logging enabled when durable local recovery matters.
+- Add a later HTTP backlog uploader for reliable store-and-forward of missed samples.
+
+Default MQTT topic layout:
+- `<topicPrefix>/<deviceId>/live`
+- `<topicPrefix>/<deviceId>/status`
+
+Example live payload shape:
+
+```json
+{
+  "device_id": "mda-logger",
+  "session_id": "mda-logger-boot-42",
+  "sequence": 12,
+  "timestamp": "2026-04-05 10:15:30",
+  "uptime_ms": 15234,
+  "sensors": [
+    {
+      "id": "oil_pressure",
+      "name": "Oil Pressure",
+      "value": 4.812,
+      "units": "bar",
+      "loop_mA": 11.699,
+      "fault": "none"
+    }
+  ]
+}
+```
 
 ## Host-side tests
 - Run `./scripts/run-host-tests.sh` to execute hardware-independent logic tests on a desktop machine.
