@@ -160,10 +160,17 @@ void Dashboard::drawDiagnosticsScreen(const AppState &state) {
                  state.system.sdEnabled ? (state.system.sdReady ? "OK" : state.system.lastLogError)
                                         : "DISABLED",
                  state.system.sdEnabled ? (state.system.sdReady ? TFT_GREEN : TFT_RED) : TFT_LIGHTGREY);
-  drawStatusLine(20, 156, "ADC", state.system.adcReady ? "OK" : "FAULT",
+  drawStatusLine(20, 156, "Upload",
+                 state.system.uploadEnabled
+                     ? (state.system.uploadConnected ? "MQTT LIVE" : state.system.lastUploadError)
+                     : "DISABLED",
+                 state.system.uploadEnabled
+                     ? (state.system.uploadConnected ? TFT_GREEN : TFT_ORANGE)
+                     : TFT_LIGHTGREY);
+  drawStatusLine(20, 180, "ADC", state.system.adcReady ? "OK" : "FAULT",
                  state.system.adcReady ? TFT_GREEN : TFT_RED);
 
-  tft_.drawFastHLine(20, 178, 440, TFT_DARKGREY);
+  tft_.drawFastHLine(20, 202, 440, TFT_DARKGREY);
 
   const uint8_t startIndex = diagnosticsPage_ * kDiagnosticsSensorsPerPage;
   const uint8_t endIndex =
@@ -171,7 +178,7 @@ void Dashboard::drawDiagnosticsScreen(const AppState &state) {
           ? (startIndex + kDiagnosticsSensorsPerPage)
           : AppConfig::kSensorCount;
   for (uint8_t index = startIndex; index < endIndex; ++index) {
-    const int16_t top = 188 + ((index - startIndex) * 62);
+    const int16_t top = 212 + ((index - startIndex) * 50);
     const SensorSnapshot &sensor = state.sensors[index];
     tft_.setTextDatum(TL_DATUM);
     tft_.setTextColor(TFT_WHITE, AppConfig::kDisplay.backgroundColor);

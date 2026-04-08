@@ -50,6 +50,18 @@ struct FeatureConfig {
   bool displayEnabled;
   bool rtcEnabled;
   bool sdLoggingEnabled;
+  bool liveUploadEnabled;
+};
+
+struct UploadConfig {
+  const char *deviceId;
+  const char *mqttHost;
+  uint16_t mqttPort;
+  const char *mqttUsername;
+  const char *mqttPassword;
+  const char *topicPrefix;
+  uint32_t publishIntervalMs;
+  uint16_t reconnectIntervalMs;
 };
 
 struct PinConfig {
@@ -138,6 +150,18 @@ inline constexpr FeatureConfig kFeatures{
     true,
     true,
     true,
+    false,
+};
+
+inline constexpr UploadConfig kLiveUpload{
+    "mda-logger",
+    "",
+    1883,
+    "",
+    "",
+    "motorsport/logger",
+    250,
+    5000,
 };
 
 inline constexpr DisplayConfig kDisplay{

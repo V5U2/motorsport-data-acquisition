@@ -19,7 +19,7 @@ class WebUi {
   void registerRoutes();
   void handleIndex();
   void handleLiveJson();
- void handleFilesJson();
+  void handleFilesJson();
   void handleDownload();
   String liveJson() const;
   String indexHtml() const;

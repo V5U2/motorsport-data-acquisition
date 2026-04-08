@@ -92,6 +92,14 @@ void testFileNameNormalization() {
   expectEqual(Logic::normalizeLogFileName(""), "", "rejects empty names");
 }
 
+void testUploadIdentifiers() {
+  expectEqual(Logic::normalizeTopicSegment(" Car 01 / Logger "), "car-01-logger",
+              "normalizes MQTT topic segment");
+  expectEqual(Logic::formatUploadTopic("/motorsport/live/", "Car 01", "Telemetry"),
+              "motorsport/live/car-01/telemetry", "formats MQTT topic");
+  expectEqual(Logic::formatSessionId("Car 01", 42), "car-01-boot-42", "formats session id");
+}
+
 }  // namespace
 
 int main() {
@@ -101,6 +109,7 @@ int main() {
   testFilter();
   testTimestampFormatting();
   testFileNameNormalization();
+  testUploadIdentifiers();
 
   if (failures == 0) {
     std::cout << "All host logic tests passed\n";

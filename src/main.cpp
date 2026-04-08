@@ -6,6 +6,7 @@
 #include "AppConfig.h"
 #include "CsvLogger.h"
 #include "Dashboard.h"
+#include "LiveUpload.h"
 #include "SensorChannel.h"
 #include "Timekeeper.h"
 #include "WebUi.h"
@@ -25,6 +26,7 @@ Timekeeper timekeeper;
 CsvLogger csvLogger;
 Dashboard dashboard;
 WebUi webUi;
+LiveUpload liveUpload;
 
 bool adcReady = false;
 bool rtcReady = false;
@@ -33,6 +35,7 @@ bool wifiReady = false;
 uint32_t lastSampleMs = 0;
 uint32_t lastDisplayMs = 0;
 uint32_t lastLogMs = 0;
+uint32_t lastUploadPublishMs = 0;
 
 bool buttonLastLevel = HIGH;
 uint32_t buttonPressedAtMs = 0;
@@ -84,10 +87,16 @@ AppState buildState() {
   state.system.sdEnabled = AppConfig::kFeatures.sdLoggingEnabled;
   state.system.sdReady = csvLogger.isReady() && csvLogger.lastError().isEmpty();
   state.system.wifiReady = wifiReady;
+  state.system.uploadEnabled = liveUpload.isEnabled();
+  state.system.uploadConnected = liveUpload.isConnected();
   state.system.wifiMode = webUi.modeString();
   state.system.ipAddress = webUi.ipAddress();
   state.system.currentLogFile = csvLogger.currentFileName();
   state.system.lastLogError = csvLogger.lastError();
+  state.system.uploadProtocol = liveUpload.protocolName();
+  state.system.uploadSessionId = liveUpload.sessionId();
+  state.system.lastUploadError = liveUpload.lastError();
+  state.system.lastUploadSequence = liveUpload.lastSequence();
   return state;
 }
 
@@ -138,6 +147,7 @@ void setup() {
     csvLogger.disable();
   }
   wifiReady = webUi.begin(AppConfig::kWifi, csvLogger);
+  liveUpload.begin(AppConfig::kLiveUpload, AppConfig::kFeatures.liveUploadEnabled);
 
   sampleSensors();
   const AppState initialState = buildState();
@@ -148,6 +158,7 @@ void setup() {
 void loop() {
   handleButton();
   webUi.handleClient();
+  liveUpload.loop();
 
   const uint32_t nowMs = millis();
 
@@ -175,5 +186,12 @@ void loop() {
     dashboard.render(state);
     webUi.publishState(state);
     lastDisplayMs = nowMs;
+  }
+
+  if ((nowMs - lastUploadPublishMs) >= AppConfig::kLiveUpload.publishIntervalMs) {
+    const AppState state = buildState();
+    liveUpload.publishIfDue(state);
+    webUi.publishState(buildState());
+    lastUploadPublishMs = nowMs;
   }
 }

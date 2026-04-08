@@ -32,10 +32,16 @@ struct SystemStatus {
   bool sdEnabled;
   bool sdReady;
   bool wifiReady;
+  bool uploadEnabled;
+  bool uploadConnected;
   String wifiMode;
   String ipAddress;
   String currentLogFile;
   String lastLogError;
+  String uploadProtocol;
+  String uploadSessionId;
+  String lastUploadError;
+  uint32_t lastUploadSequence;
 };
 
 struct AppState {
