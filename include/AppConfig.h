@@ -9,6 +9,7 @@ namespace AppConfig {
 constexpr float kShuntResistanceOhms = 165.0f;
 constexpr uint8_t kAds1115Address = 0x48;
 constexpr uint8_t kDs3231Address = 0x68;
+constexpr uint8_t kRv3028Address = 0x52;
 
 struct SensorConfig {
   const char *id;
@@ -27,6 +28,11 @@ struct SensorConfig {
 enum class WifiMode : uint8_t {
   SoftAp,
   Station
+};
+
+enum class RtcKind : uint8_t {
+  Ds3231,
+  Rv3028,
 };
 
 struct TimingConfig {
@@ -64,6 +70,11 @@ struct UploadConfig {
   uint16_t reconnectIntervalMs;
 };
 
+struct RtcConfig {
+  RtcKind kind;
+  uint8_t address;
+};
+
 struct PinConfig {
   uint8_t i2cSda;
   uint8_t i2cScl;
@@ -96,6 +107,11 @@ inline constexpr PinConfig kPins{
     PIN_TFT_BL,
     PIN_SD_CS,
     PIN_UI_BUTTON,
+};
+
+inline constexpr RtcConfig kRtc{
+    RtcKind::Rv3028,
+    kRv3028Address,
 };
 
 inline constexpr std::array<SensorConfig, 2> kSensorConfigs{{

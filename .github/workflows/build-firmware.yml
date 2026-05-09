@@ -37,20 +37,20 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install platformio
 
-      - name: Build firmware
-        run: pio run
+      - name: Run full repo verification
+        run: ./scripts/verify-repo.sh --full
 
       - name: Prepare firmware artifacts
         run: |
           mkdir -p dist
-          cp .pio/build/esp32s3-devkitc-1/firmware.bin dist/motorsport-data-acquisition-firmware.bin
-          cp .pio/build/esp32s3-devkitc-1/bootloader.bin dist/motorsport-data-acquisition-bootloader.bin
-          cp .pio/build/esp32s3-devkitc-1/partitions.bin dist/motorsport-data-acquisition-partitions.bin
-          cp .pio/build/esp32s3-devkitc-1/firmware.elf dist/motorsport-data-acquisition-firmware.elf
+          cp .pio/build/um_tinys3/firmware.bin dist/motorsport-data-acquisition-firmware.bin
+          cp .pio/build/um_tinys3/bootloader.bin dist/motorsport-data-acquisition-bootloader.bin
+          cp .pio/build/um_tinys3/partitions.bin dist/motorsport-data-acquisition-partitions.bin
+          cp .pio/build/um_tinys3/firmware.elf dist/motorsport-data-acquisition-firmware.elf
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-esp32s3-devkitc-1
+          name: firmware-um_tinys3
           path: dist/*
           if-no-files-found: error
