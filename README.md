@@ -46,7 +46,7 @@ The firmware now includes a live telemetry publisher for near-real-time upload. 
 
 Current behavior:
 - The device publishes live sensor snapshots to MQTT on a fixed interval.
-- Each message includes a normalized `device_id`, a per-boot `session_id`, a monotonic `sequence`, the current timestamp, and the current sensor values.
+- Each message includes `schema_version`, a normalized `device_id`, a per-boot `session_id`, a monotonic `sequence`, the current timestamp, and the current sensor values.
 - The retained MQTT status topic now reflects both online and offline state so downstream consumers do not keep stale liveness.
 - The firmware exposes live upload state through the local web UI and `/api/live`.
 - Local SD logging remains the durable on-device record when SD logging is enabled.
@@ -82,10 +82,16 @@ Default MQTT topic layout:
 - `<topicPrefix>/<deviceId>/live`
 - `<topicPrefix>/<deviceId>/status`
 
+MQTT payload compatibility:
+- Current live and status payloads use `schema_version: 1`.
+- Version `1` keeps the existing live/status fields stable for deployed bridge and app consumers.
+- Future incompatible payload changes must bump `Logic::kLivePayloadSchemaVersion`, update this README, and keep bridge tests accepting version `1` during rollout.
+
 Example live payload shape:
 
 ```json
 {
+  "schema_version": 1,
   "device_id": "mda-logger",
   "session_id": "mda-logger-boot-42",
   "sequence": 12,

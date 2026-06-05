@@ -9,6 +9,8 @@
 
 namespace Logic {
 
+constexpr uint16_t kLivePayloadSchemaVersion = 1;
+
 float currentFromVoltage(float voltage, float shuntResistanceOhms);
 SensorFault determineSensorFault(float voltage, float currentmA, bool adcAvailable);
 float scaleEngineeringValue(float currentmA,

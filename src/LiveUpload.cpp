@@ -178,6 +178,7 @@ String LiveUpload::statusTopic() const {
 
 String LiveUpload::buildStatusJson(const bool connected) const {
   String json = "{";
+  json += "\"schema_version\":" + String(Logic::kLivePayloadSchemaVersion) + ",";
   json += "\"device_id\":\"" + jsonEscape(deviceId_) + "\",";
   json += "\"session_id\":\"" + jsonEscape(sessionId_) + "\",";
   json += "\"protocol\":\"mqtt\",";
@@ -188,6 +189,7 @@ String LiveUpload::buildStatusJson(const bool connected) const {
 
 String LiveUpload::buildSnapshotJson(const AppState &state, const uint32_t sequence) const {
   String json = "{";
+  json += "\"schema_version\":" + String(Logic::kLivePayloadSchemaVersion) + ",";
   json += "\"device_id\":\"" + jsonEscape(deviceId_) + "\",";
   json += "\"session_id\":\"" + jsonEscape(sessionId_) + "\",";
   json += "\"sequence\":" + String(sequence) + ",";
