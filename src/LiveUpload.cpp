@@ -37,6 +37,11 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config, const bool enabled
     return false;
   }
 
+  if (!Logic::mqttIdentityMatches(config_.deviceId, config_.mqttUsername)) {
+    lastError_ = "MQTT username must match normalized device ID " + deviceId_;
+    return false;
+  }
+
   lastError_ = "";
   return true;
 }

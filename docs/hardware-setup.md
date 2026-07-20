@@ -88,7 +88,7 @@ Optional hardware toggles:
 - Set `AppConfig::kFeatures.rtcEnabled` to `false` when no RTC hardware is fitted.
 - Set `AppConfig::kFeatures.sdLoggingEnabled` to `false` when no SD hardware is fitted.
 
-For station Wi-Fi or live MQTT commissioning, copy [`include/AppSecrets.example.h`](../include/AppSecrets.example.h) to the git-ignored `include/AppSecrets.h`. Keep Wi-Fi and broker passwords in that local file. An authenticated production broker expects `APEXI_MQTT_USERNAME` to equal the normalized `AppConfig::kLiveUpload.deviceId`, with the matching password provisioned in the infrastructure vault.
+For station Wi-Fi or live MQTT commissioning, copy [`include/AppSecrets.example.h`](../include/AppSecrets.example.h) to the git-ignored `include/AppSecrets.h`. Keep Wi-Fi and broker passwords in that local file. An authenticated production broker requires `APEXI_MQTT_USERNAME` to equal the normalized `AppConfig::kLiveUpload.deviceId`; firmware startup rejects a mismatched identity before connecting. Provision the matching password in the infrastructure vault.
 
 When using receiver modules:
 - Treat the field 4-20 mA transmitters as external inputs to the logger rather than part of the logger BOM.

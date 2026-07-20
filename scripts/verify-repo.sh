@@ -11,16 +11,17 @@ run_fast() {
 
 run_full() {
   run_fast
-  if [ -x "$ROOT_DIR/.venv/bin/pio" ]; then
+  if [ -x "$ROOT_DIR/.venv/bin/python" ] && \
+      "$ROOT_DIR/.venv/bin/python" -c 'import platformio' >/dev/null 2>&1; then
     PLATFORMIO_CORE_DIR="$ROOT_DIR/.platformio" \
       PLATFORMIO_SETTING_ENABLE_TELEMETRY=no \
-      "$ROOT_DIR/.venv/bin/pio" run
+      "$ROOT_DIR/.venv/bin/python" -m platformio run
   elif command -v pio >/dev/null 2>&1; then
     PLATFORMIO_CORE_DIR="$ROOT_DIR/.platformio" \
       PLATFORMIO_SETTING_ENABLE_TELEMETRY=no \
       pio run
   else
-    echo "verify-repo: no PlatformIO executable found (.venv/bin/pio or pio on PATH)" >&2
+    echo "verify-repo: no healthy PlatformIO install found (.venv Python module or pio on PATH)" >&2
     exit 1
   fi
 }

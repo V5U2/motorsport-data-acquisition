@@ -37,4 +37,10 @@ grep -q "#define TFT_RST  PIN_TFT_RST" "$ROOT_DIR/include/TFT_Setup.h" || fail "
 grep -q "docs/hardware-setup.md" "$ROOT_DIR/README.md" || fail "README.md does not point to docs/hardware-setup.md"
 grep -q "docs/repo-contracts.md" "$ROOT_DIR/AGENTS.md" || fail "AGENTS.md does not point to docs/repo-contracts.md"
 
+git -C "$ROOT_DIR" check-ignore --quiet include/AppSecrets.h || \
+  fail "include/AppSecrets.h must remain ignored"
+if git -C "$ROOT_DIR" ls-files --error-unmatch -- include/AppSecrets.h >/dev/null 2>&1; then
+  fail "include/AppSecrets.h contains local credentials and must not be tracked"
+fi
+
 echo "repo-contracts: ok"

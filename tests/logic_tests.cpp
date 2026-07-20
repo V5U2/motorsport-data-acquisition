@@ -104,6 +104,14 @@ void testUploadIdentifiers() {
               "pins live MQTT payload schema version");
   expectEqual(Logic::normalizeTopicSegment(" Car 01 / Logger "), "car-01-logger",
               "normalizes MQTT topic segment");
+  expectEqual(Logic::mqttIdentityMatches(" Car 01 / Logger ", "car-01-logger"), 1,
+              "accepts username matching normalized device ID");
+  expectEqual(Logic::mqttIdentityMatches("Car 01", ""), 1,
+              "allows anonymous MQTT configuration");
+  expectEqual(Logic::mqttIdentityMatches("Car 01", "Car 01"), 0,
+              "rejects unnormalized MQTT username");
+  expectEqual(Logic::mqttIdentityMatches("Car 01", "another-device"), 0,
+              "rejects another device identity");
   expectEqual(Logic::formatUploadTopic("/motorsport/live/", "Car 01", "Telemetry"),
               "motorsport/live/car-01/telemetry", "formats MQTT topic");
   expectEqual(Logic::formatSessionId("Car 01", 42), "car-01-boot-42", "formats session id");

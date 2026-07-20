@@ -146,6 +146,17 @@ std::string normalizeTopicSegment(std::string_view rawSegment) {
   return normalized;
 }
 
+bool mqttIdentityMatches(const std::string_view deviceId, const std::string_view username) {
+  if (username.empty()) {
+    return true;
+  }
+  std::string normalizedDevice = normalizeTopicSegment(deviceId);
+  if (normalizedDevice.empty()) {
+    normalizedDevice = "mda-logger";
+  }
+  return username == normalizedDevice;
+}
+
 std::string formatUploadTopic(std::string_view prefix, std::string_view deviceId, std::string_view leaf) {
   std::string normalizedPrefix = trimWhitespace(prefix);
   while (!normalizedPrefix.empty() && normalizedPrefix.front() == '/') {
