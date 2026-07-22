@@ -135,7 +135,7 @@ void setup() {
   }
 
   if (AppConfig::kFeatures.rtcEnabled) {
-    rtcReady = timekeeper.begin(Wire);
+    rtcReady = timekeeper.begin(Wire, AppConfig::kRtc);
   } else {
     timekeeper.disable();
     rtcReady = false;

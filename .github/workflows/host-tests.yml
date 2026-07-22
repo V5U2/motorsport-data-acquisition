@@ -1,13 +1,13 @@
-name: Host Tests
+name: Fast Verification
 
 on:
   push:
   pull_request:
 
 jobs:
-  host-logic-tests:
+  fast-verification:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Run host logic tests
-        run: ./scripts/run-host-tests.sh
+      - name: Run fast repo verification
+        run: ./scripts/verify-repo.sh --fast
