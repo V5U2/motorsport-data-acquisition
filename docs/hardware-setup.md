@@ -90,6 +90,10 @@ Optional hardware toggles:
 
 For station Wi-Fi or live MQTT commissioning, copy [`include/AppSecrets.example.h`](../include/AppSecrets.example.h) to the git-ignored `include/AppSecrets.h`. Keep Wi-Fi and broker passwords in that local file. An authenticated production broker requires `APEXI_MQTT_USERNAME` to equal the normalized `AppConfig::kLiveUpload.deviceId`; firmware startup rejects a mismatched identity before connecting. Provision the matching password in the infrastructure vault.
 
+For the managed development environment, use broker hostname `apexlabs-dev`, port `1883`, and topic prefix `motorsport/logger` from an allowed LAN or VPN. Set `AppConfig::kWifi.mode` to `WifiMode::Station` and `AppConfig::kFeatures.liveUploadEnabled` to `true` before building the track firmware.
+
+Commissioning is complete only when the device UI reports `MQTT LIVE`, `/api/live` reports a current `system.upload_session_id` and increasing `system.upload_sequence`, and the same source session appears in the telemetry app. Each reboot intentionally creates a new source session. The cross-system start, monitoring, attachment, and finalization procedure is maintained in the telemetry app [Live Event Operations runbook](https://github.com/V5U2/motorsport-telemetry-app/blob/main/docs/live-events.md).
+
 When using receiver modules:
 - Treat the field 4-20 mA transmitters as external inputs to the logger rather than part of the logger BOM.
 - Treat the removable microSD card as runtime media rather than part of the logger BOM when SD logging hardware is installed.
