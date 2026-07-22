@@ -53,6 +53,18 @@ Current behavior:
 - The firmware exposes live upload state through the local web UI and `/api/live`.
 - Local SD logging remains the durable on-device record when SD logging is enabled.
 
+### Starting and stopping a live session
+
+There is no separate start-event command in the firmware. When `kFeatures.liveUploadEnabled` is `true` and station Wi-Fi/MQTT are configured, each device boot creates a new `<deviceId>-boot-<id>` session and starts publishing as soon as Wi-Fi and MQTT connect.
+
+Before using the logger on track:
+
+1. Confirm the local UI reports station Wi-Fi connected and `MQTT LIVE`.
+2. Check `/api/live` under `system` for `upload_enabled: true`, `upload_connected: true`, the expected `upload_session_id`, an increasing `upload_sequence`, and an empty `last_upload_error`.
+3. Confirm the corresponding session appears in the telemetry app's **Ungrouped Sessions**, then attach it to the prepared event.
+
+Powering down, losing Wi-Fi, or losing MQTT marks the stream offline through retained status or the MQTT last will. The telemetry app owns durable session finalization; the device does not finalize server-side data. Follow the telemetry app [Live Event Operations runbook](https://github.com/V5U2/motorsport-telemetry-app/blob/main/docs/live-events.md) for the complete race-day procedure.
+
 Current limits:
 - This repository currently implements the MQTT live stream only.
 - HTTP backlog upload and store-and-forward replay are not implemented yet.
