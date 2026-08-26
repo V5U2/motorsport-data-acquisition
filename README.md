@@ -1,6 +1,6 @@
 # Motorsport Data Acquisition
 
-ESP32-S3 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and dashboard.
+ESP8266 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and dashboard, targeting the NodeMCU 1.0 / ESP-12E DevKit V2.
 
 ## Features
 - Reads a configurable set of 4-20 mA sensors through an ADS1115-based analog front end
@@ -12,7 +12,7 @@ ESP32-S3 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logge
 
 ## Required hardware
 
-This project targets a TinyS3-based logger with external 4-20 mA receiver modules and optional display, RTC, and storage hardware.
+This project targets a NodeMCU 1.0 / ESP-12E DevKit V2 logger with external 4-20 mA receiver modules. The supported default is the pressure-only bench configuration: one 0-8 bar transmitter through a DFRobot SEN0262 receiver into ADS1115 channel A0. Field transmitters are ordered for direct operation from the protected 12 V vehicle supply; the 24 V boost path is only a fallback when a transmitter cannot meet its loop compliance requirement at 12 V.
 
 For the detailed BOM, pin table, wiring guidance, and commissioning steps, see [docs/hardware-setup.md](docs/hardware-setup.md).
 
@@ -34,11 +34,11 @@ Primary source files:
 
 ## Build and flash
 1. Install PlatformIO Core or use the PlatformIO VS Code extension.
-2. Review the pin mapping in [`include/PinDefinitions.h`](include/PinDefinitions.h) and update it for the actual ESP32-S3 dev board and TFT used.
+2. Wire the NodeMCU using the D-label/GPIO table in [`docs/hardware-setup.md`](docs/hardware-setup.md), then review [`include/PinDefinitions.h`](include/PinDefinitions.h).
 3. Review sensor ranges, timing values, live upload settings, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h). Copy `include/AppSecrets.example.h` to the ignored `include/AppSecrets.h` and set Wi-Fi/MQTT credentials there.
 4. Run [`scripts/verify-repo.sh`](scripts/verify-repo.sh) `--fast` for host-side verification and contract checks, and `--full` when the local PlatformIO toolchain is available.
-5. Build and upload with `pio run -t upload`.
-6. Open the serial monitor with `pio device monitor`.
+5. Build and upload with `pio run -t upload --upload-port /dev/cu.usbserial-10`, replacing the port when needed.
+6. Open the serial monitor at 115200 baud with `pio device monitor`. If a CH340-based board stays in reset, open the port with DTR and RTS inactive or press the board's `RST` button once.
 
 ## Live streaming
 
@@ -74,7 +74,7 @@ Mermaid overview:
 
 ```mermaid
 flowchart LR
-    A["4-20 mA Sensors"] --> B["ESP32-S3 Firmware"]
+    A["4-20 mA Sensors"] --> B["ESP8266 Firmware"]
     B --> C["ADS1115 Sampling"]
     C --> D["App State"]
     D --> E["TFT Dashboard (Optional)"]
@@ -134,6 +134,7 @@ Example live payload shape:
 - Hold the UI button for 1.2 seconds to clear latched sensor faults.
 
 ## Web endpoints
+The checked-in default is station mode. Create the ignored `include/AppSecrets.h` from the example and provide a 2.4 GHz SSID/password; `fast_connect`-style BSSID/channel pinning is not used, so the ESP8266 performs a normal network scan. If station association times out, firmware falls back to the open 2.4 GHz SoftAP `MDA-LOGGER` at `http://192.168.44.1` on channel 6. Set `AppConfig::kWifi.apPassword` to an 8+ character WPA2 key if a closed fallback AP is required.
 - `/` simple phone-friendly dashboard mirror
 - `/api/live` current readings and system state as JSON
 - `/api/files` available CSV files on the SD card

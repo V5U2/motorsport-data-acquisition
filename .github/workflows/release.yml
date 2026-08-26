@@ -42,16 +42,12 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p dist
-          cp .pio/build/um_tinys3/firmware.bin dist/motorsport-data-acquisition-firmware.bin
-          cp .pio/build/um_tinys3/bootloader.bin dist/motorsport-data-acquisition-bootloader.bin
-          cp .pio/build/um_tinys3/partitions.bin dist/motorsport-data-acquisition-partitions.bin
-          cp .pio/build/um_tinys3/firmware.elf dist/motorsport-data-acquisition-firmware.elf
+          cp .pio/build/nodemcuv2/firmware.bin dist/motorsport-data-acquisition-nodemcuv2-firmware.bin
+          cp .pio/build/nodemcuv2/firmware.elf dist/motorsport-data-acquisition-nodemcuv2-firmware.elf
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/motorsport-data-acquisition-firmware.bin
-            dist/motorsport-data-acquisition-bootloader.bin
-            dist/motorsport-data-acquisition-partitions.bin
-            dist/motorsport-data-acquisition-firmware.elf
+            dist/motorsport-data-acquisition-nodemcuv2-firmware.bin
+            dist/motorsport-data-acquisition-nodemcuv2-firmware.elf

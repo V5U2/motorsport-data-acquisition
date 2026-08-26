@@ -14,7 +14,7 @@
 namespace {
 
 Adafruit_ADS1115 ads;
-SPIClass spiBus(FSPI);
+SPIClass &spiBus = SPI;
 std::array<SensorChannel, AppConfig::kSensorCount> sensorChannels = [] {
   std::array<SensorChannel, AppConfig::kSensorCount> channels{};
   for (size_t index = 0; index < AppConfig::kSensorCount; ++index) {
@@ -36,6 +36,7 @@ uint32_t lastSampleMs = 0;
 uint32_t lastDisplayMs = 0;
 uint32_t lastLogMs = 0;
 uint32_t lastUploadPublishMs = 0;
+uint32_t lastSerialMs = 0;
 
 bool buttonLastLevel = HIGH;
 uint32_t buttonPressedAtMs = 0;
@@ -112,6 +113,12 @@ void sampleSensors() {
 
 void setup() {
   Serial.begin(115200);
+  const uint32_t serialWaitStartMs = millis();
+  while (!Serial && (millis() - serialWaitStartMs) < 5000) {
+    delay(10);
+  }
+  Serial.println("MDA logger boot");
+  Serial.flush();
 
   pinMode(AppConfig::kPins.buttonPin, INPUT_PULLUP);
   if (AppConfig::kFeatures.displayEnabled) {
@@ -123,8 +130,25 @@ void setup() {
     digitalWrite(AppConfig::kPins.sdCs, HIGH);
   }
 
+  if (!AppConfig::kFeatures.rtcEnabled) {
+    timekeeper.disable();
+    rtcReady = false;
+  }
+  if (!AppConfig::kFeatures.sdLoggingEnabled) {
+    csvLogger.disable();
+  }
+
+  wifiReady = webUi.begin(AppConfig::kWifi, csvLogger);
+  liveUpload.begin(AppConfig::kLiveUpload, AppConfig::kFeatures.liveUploadEnabled);
+  Serial.print("wifiReady=");
+  Serial.println(wifiReady ? "1" : "0");
+  Serial.print("wifiMode=");
+  Serial.println(webUi.modeString());
+  Serial.print("ip=");
+  Serial.println(webUi.ipAddress());
+
   Wire.begin(AppConfig::kPins.i2cSda, AppConfig::kPins.i2cScl);
-  spiBus.begin(AppConfig::kPins.spiSclk, AppConfig::kPins.spiMiso, AppConfig::kPins.spiMosi);
+  spiBus.begin();
 
   dashboard.begin();
 
@@ -136,18 +160,14 @@ void setup() {
 
   if (AppConfig::kFeatures.rtcEnabled) {
     rtcReady = timekeeper.begin(Wire, AppConfig::kRtc);
-  } else {
-    timekeeper.disable();
-    rtcReady = false;
   }
 
   if (AppConfig::kFeatures.sdLoggingEnabled) {
     csvLogger.begin(AppConfig::kPins.sdCs, spiBus);
-  } else {
-    csvLogger.disable();
   }
-  wifiReady = webUi.begin(AppConfig::kWifi, csvLogger);
-  liveUpload.begin(AppConfig::kLiveUpload, AppConfig::kFeatures.liveUploadEnabled);
+
+  Serial.print("adcReady=");
+  Serial.println(adcReady ? "1" : "0");
 
   sampleSensors();
   const AppState initialState = buildState();
@@ -193,5 +213,34 @@ void loop() {
     liveUpload.publishIfDue(state);
     webUi.publishState(buildState());
     lastUploadPublishMs = nowMs;
+  }
+
+  if ((nowMs - lastSerialMs) >= 1000) {
+    const AppState state = buildState();
+    Serial.print("IP_ADDRESS=");
+    Serial.print(state.system.ipAddress);
+    Serial.print(" MODE=");
+    Serial.print(state.system.wifiMode);
+    Serial.print(" adc=");
+    Serial.print(state.system.adcReady ? 1 : 0);
+    Serial.print(" wifi=");
+    Serial.print(state.system.wifiReady ? 1 : 0);
+    Serial.print(" ip=");
+    Serial.print(state.system.ipAddress);
+    for (const SensorSnapshot &sensor : state.sensors) {
+      Serial.print(" | ");
+      Serial.print(sensor.id);
+      Serial.print(" V=");
+      Serial.print(sensor.rawVoltage, 3);
+      Serial.print(" mA=");
+      Serial.print(sensor.loopCurrentmA, 2);
+      Serial.print(" val=");
+      Serial.print(sensor.filteredValue, 2);
+      Serial.print(" fault=");
+      Serial.print(sensorFaultToString(sensor.activeFault));
+    }
+    Serial.println();
+    Serial.flush();
+    lastSerialMs = nowMs;
   }
 }

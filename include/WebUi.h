@@ -1,7 +1,13 @@
 #pragma once
 
 #include <Arduino.h>
+#if defined(ESP8266)
+#include <ESP8266WebServer.h>
+using LoggerWebServer = ESP8266WebServer;
+#else
 #include <WebServer.h>
+using LoggerWebServer = WebServer;
+#endif
 #include "AppConfig.h"
 #include "CsvLogger.h"
 #include "Types.h"
@@ -25,7 +31,7 @@ class WebUi {
   String indexHtml() const;
   String sensorCardsHtml() const;
 
-  WebServer server_{80};
+  LoggerWebServer server_{80};
   CsvLogger *logger_ = nullptr;
   AppState state_{};
   bool ready_ = false;

@@ -1,20 +1,21 @@
 #pragma once
 
 // Central pin definitions shared by the firmware and the TFT_eSPI setup.
-// These defaults target the Unexpected Maker TinyS3 plus the optional Shield Logger.
+// These defaults target a NodeMCU 1.0 / ESP-12E DevKit V2. GPIO numbers are
+// used in code; the matching NodeMCU D-labels are included for wiring.
 
-#define PIN_I2C_SDA 8
-#define PIN_I2C_SCL 9
+#define PIN_I2C_SDA 4   // D2
+#define PIN_I2C_SCL 5   // D1
 
-#define PIN_SPI_MOSI 35
-#define PIN_SPI_MISO 37
-#define PIN_SPI_SCLK 36
+#define MDA_PIN_SPI_MOSI 13  // D7
+#define MDA_PIN_SPI_MISO 12  // D6
+#define MDA_PIN_SPI_SCLK 14  // D5
 
-#define PIN_TFT_CS 3
-#define PIN_TFT_DC 4
-#define PIN_TFT_RST 5
-#define PIN_TFT_BL 6
+#define PIN_TFT_CS 15    // D8; must remain low during boot
+#define PIN_TFT_DC 0     // D3; must remain high during boot
+#define PIN_TFT_RST 2    // D4; must remain high during boot
+#define PIN_TFT_BL -1    // Wire backlight to the appropriate supply
 
-#define PIN_SD_CS 34
+#define PIN_SD_CS 16     // D0
 
-#define PIN_UI_BUTTON 7
+#define PIN_UI_BUTTON 3  // RX; firmware only transmits serial diagnostics

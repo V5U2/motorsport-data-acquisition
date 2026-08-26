@@ -23,13 +23,13 @@ done
 
 grep -q "firmware-$PLATFORMIO_ENV" "$ROOT_DIR/.github/workflows/build-firmware.yml" || fail "build-firmware.yml artifact name does not include $PLATFORMIO_ENV"
 
-for macro in PIN_SPI_MISO PIN_SPI_MOSI PIN_SPI_SCLK PIN_TFT_CS PIN_TFT_DC PIN_TFT_RST; do
+for macro in MDA_PIN_SPI_MISO MDA_PIN_SPI_MOSI MDA_PIN_SPI_SCLK PIN_TFT_CS PIN_TFT_DC PIN_TFT_RST; do
   grep -q "#define $macro" "$ROOT_DIR/include/PinDefinitions.h" || fail "missing $macro in include/PinDefinitions.h"
 done
 
-grep -q "#define TFT_MISO PIN_SPI_MISO" "$ROOT_DIR/include/TFT_Setup.h" || fail "TFT_Setup.h is not wired to PIN_SPI_MISO"
-grep -q "#define TFT_MOSI PIN_SPI_MOSI" "$ROOT_DIR/include/TFT_Setup.h" || fail "TFT_Setup.h is not wired to PIN_SPI_MOSI"
-grep -q "#define TFT_SCLK PIN_SPI_SCLK" "$ROOT_DIR/include/TFT_Setup.h" || fail "TFT_Setup.h is not wired to PIN_SPI_SCLK"
+grep -q "#define TFT_MISO MDA_PIN_SPI_MISO" "$ROOT_DIR/include/TFT_Setup.h" || fail "TFT_Setup.h is not wired to MDA_PIN_SPI_MISO"
+grep -q "#define TFT_MOSI MDA_PIN_SPI_MOSI" "$ROOT_DIR/include/TFT_Setup.h" || fail "TFT_Setup.h is not wired to MDA_PIN_SPI_MOSI"
+grep -q "#define TFT_SCLK MDA_PIN_SPI_SCLK" "$ROOT_DIR/include/TFT_Setup.h" || fail "TFT_Setup.h is not wired to MDA_PIN_SPI_SCLK"
 grep -q "#define TFT_CS   PIN_TFT_CS" "$ROOT_DIR/include/TFT_Setup.h" || fail "TFT_Setup.h is not wired to PIN_TFT_CS"
 grep -q "#define TFT_DC   PIN_TFT_DC" "$ROOT_DIR/include/TFT_Setup.h" || fail "TFT_Setup.h is not wired to PIN_TFT_DC"
 grep -q "#define TFT_RST  PIN_TFT_RST" "$ROOT_DIR/include/TFT_Setup.h" || fail "TFT_Setup.h is not wired to PIN_TFT_RST"

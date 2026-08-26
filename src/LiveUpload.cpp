@@ -1,7 +1,11 @@
 #include "LiveUpload.h"
 
+#if defined(ESP8266)
+#include <ESP8266WiFi.h>
+#else
 #include <WiFi.h>
 #include <esp_system.h>
+#endif
 
 #include "Logic.h"
 
@@ -20,9 +24,15 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config, const bool enabled
   const std::string normalizedDevice = Logic::normalizeTopicSegment(config.deviceId);
   deviceId_ = normalizedDevice.empty() ? "mda-logger" : String(normalizedDevice.c_str());
 
+#if defined(ESP8266)
+  const uint32_t bootCounter = ESP.random();
+  const uint32_t chipSuffix = ESP.getChipId() & 0xFFFFUL;
+#else
   const uint32_t bootCounter = esp_random();
+  const uint32_t chipSuffix = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFULL);
+#endif
   sessionId_ = String(Logic::formatSessionId(deviceId_.c_str(), bootCounter).c_str());
-  clientId_ = deviceId_ + "-" + String(static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFULL), HEX);
+  clientId_ = deviceId_ + "-" + String(chipSuffix, HEX);
 
   mqttClient_.setServer(config_.mqttHost, config_.mqttPort);
   mqttClient_.setBufferSize(kMqttBufferSize);

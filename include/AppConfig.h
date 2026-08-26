@@ -26,7 +26,8 @@
 
 namespace AppConfig {
 
-constexpr float kShuntResistanceOhms = 165.0f;
+// DFRobot SEN0262 presents a 120 ohm sense path (0-25 mA -> 0-3 V).
+constexpr float kShuntResistanceOhms = 120.0f;
 constexpr uint8_t kAds1115Address = 0x48;
 constexpr uint8_t kDs3231Address = 0x68;
 constexpr uint8_t kRv3028Address = 0x52;
@@ -67,6 +68,8 @@ struct WifiConfig {
   WifiMode mode;
   const char *apSsid;
   const char *apPassword;
+  uint8_t apAddress[4];
+  uint8_t apChannel;
   const char *stationSsid;
   const char *stationPassword;
   uint8_t connectTimeoutSeconds;
@@ -118,9 +121,9 @@ struct DisplayConfig {
 inline constexpr PinConfig kPins{
     PIN_I2C_SDA,
     PIN_I2C_SCL,
-    PIN_SPI_MOSI,
-    PIN_SPI_MISO,
-    PIN_SPI_SCLK,
+    MDA_PIN_SPI_MOSI,
+    MDA_PIN_SPI_MISO,
+    MDA_PIN_SPI_SCLK,
     PIN_TFT_CS,
     PIN_TFT_DC,
     PIN_TFT_RST,
@@ -134,7 +137,8 @@ inline constexpr RtcConfig kRtc{
     kRv3028Address,
 };
 
-inline constexpr std::array<SensorConfig, 2> kSensorConfigs{{
+// Current bench configuration: pressure transmitter on ADS1115 A0 only.
+inline constexpr std::array<SensorConfig, 1> kSensorConfigs{{
     {
         "oil_pressure",
         "Oil Pressure",
@@ -142,23 +146,10 @@ inline constexpr std::array<SensorConfig, 2> kSensorConfigs{{
         4.0f,
         20.0f,
         0.0f,
-        10.0f,
+        8.0f,
         "bar",
         1.5f,
-        8.5f,
-        0.18f,
-    },
-    {
-        "oil_temperature",
-        "Oil Temp",
-        1,
-        4.0f,
-        20.0f,
-        0.0f,
-        150.0f,
-        "C",
-        70.0f,
-        125.0f,
+        7.5f,
         0.18f,
     },
 }};
@@ -174,18 +165,20 @@ inline constexpr TimingConfig kTiming{
 };
 
 inline constexpr WifiConfig kWifi{
-    WifiMode::SoftAp,
+    WifiMode::Station,
     "MDA-LOGGER",
-    "changeme1",
+    "",
+    {192, 168, 44, 1},
+    6,
     APEXI_WIFI_STATION_SSID,
     APEXI_WIFI_STATION_PASSWORD,
-    10,
+    30,
 };
 
 inline constexpr FeatureConfig kFeatures{
-    true,
-    true,
-    true,
+    false,
+    false,
+    false,
     false,
 };
 

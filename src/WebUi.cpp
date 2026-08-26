@@ -1,30 +1,62 @@
 #include "WebUi.h"
 
+#if defined(ESP8266)
+#include <ESP8266WiFi.h>
+#else
 #include <WiFi.h>
+#endif
 
 bool WebUi::begin(const AppConfig::WifiConfig &config, CsvLogger &logger) {
   logger_ = &logger;
 
   if (config.mode == AppConfig::WifiMode::Station && strlen(config.stationSsid) > 0) {
+    WiFi.persistent(false);
+#if defined(ESP8266)
+    WiFi.hostname("mda-logger");
+#else
+    WiFi.setHostname("mda-logger");
+#endif
     WiFi.mode(WIFI_STA);
+    Serial.print("STA joining ");
+    Serial.println(config.stationSsid);
     WiFi.begin(config.stationSsid, config.stationPassword);
-
     const uint32_t startMs = millis();
     while (WiFi.status() != WL_CONNECTED &&
            (millis() - startMs) < (config.connectTimeoutSeconds * 1000UL)) {
       delay(100);
     }
+    ready_ = WiFi.status() == WL_CONNECTED;
 
-    if (WiFi.status() == WL_CONNECTED) {
-      ready_ = true;
+    if (ready_) {
       mode_ = "STA";
       ipAddress_ = WiFi.localIP().toString();
+      Serial.print("STA connected ip=");
+      Serial.println(ipAddress_);
+    } else {
+      Serial.print("STA failed status=");
+      Serial.println(static_cast<int>(WiFi.status()));
     }
   }
 
   if (!ready_) {
+    WiFi.persistent(false);
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+    delay(100);
     WiFi.mode(WIFI_AP);
-    ready_ = WiFi.softAP(config.apSsid, config.apPassword);
+#if defined(ESP8266)
+    WiFi.setSleepMode(WIFI_NONE_SLEEP);
+#else
+    WiFi.setSleep(false);
+#endif
+
+    const IPAddress apIp(config.apAddress[0], config.apAddress[1], config.apAddress[2],
+                         config.apAddress[3]);
+    WiFi.softAPConfig(apIp, apIp, IPAddress(255, 255, 255, 0));
+    const uint8_t channel = config.apChannel == 0 ? 6 : config.apChannel;
+    const char *passphrase = strlen(config.apPassword) >= 8 ? config.apPassword : nullptr;
+    ready_ = WiFi.softAP(config.apSsid, passphrase, channel, 0, 4);
+    delay(150);
     mode_ = "AP";
     ipAddress_ = WiFi.softAPIP().toString();
   }
@@ -162,7 +194,7 @@ String WebUi::indexHtml() const {
 </head>
 <body>
   <header>
-    <h1>ESP32 Sensor Logger</h1>
+    <h1>Motorsport Sensor Logger</h1>
     <div id="stamp">Waiting for data...</div>
   </header>
   <section class="grid">

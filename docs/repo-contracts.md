@@ -7,7 +7,7 @@ This repo uses a small set of source-of-truth files for the important facts, and
 | Concern | Owning file(s) | Notes |
 | --- | --- | --- |
 | PlatformIO environment and board target | [`platformio.ini`](../platformio.ini) | Canonical source for build env name, board ID, and build flags |
-| Pin map | [`include/PinDefinitions.h`](../include/PinDefinitions.h) | Canonical source for GPIO assignments |
+| Pin map | [`include/PinDefinitions.h`](../include/PinDefinitions.h) | Canonical source for NodeMCU D-label/GPIO assignments |
 | Display wiring handoff | [`include/TFT_Setup.h`](../include/TFT_Setup.h) | Must consume the pin macros from `PinDefinitions.h` |
 | Feature toggles, RTC selection, sensor config, upload config | [`include/AppConfig.h`](../include/AppConfig.h) | Canonical source for firmware configuration defaults |
 | Live MQTT payload schema version | [`include/Logic.h`](../include/Logic.h) | `Logic::kLivePayloadSchemaVersion` is the canonical version emitted in live/status payloads |
