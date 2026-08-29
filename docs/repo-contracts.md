@@ -10,6 +10,7 @@ This repo uses a small set of source-of-truth files for the important facts, and
 | Pin map | [`include/PinDefinitions.h`](../include/PinDefinitions.h) | Canonical source for NodeMCU D-label/GPIO assignments |
 | Display wiring handoff | [`include/TFT_Setup.h`](../include/TFT_Setup.h) | Must consume the pin macros from `PinDefinitions.h` |
 | Feature toggles, RTC selection, sensor config, MQTT and OTA config | [`include/AppConfig.h`](../include/AppConfig.h) | Canonical source for firmware configuration defaults |
+| Persistent upstream override | [`include/RuntimeSettings.h`](../include/RuntimeSettings.h), [`src/RuntimeSettings.cpp`](../src/RuntimeSettings.cpp) | Flash-backed host, port, and enable flag with defaults from `AppConfig.h` |
 | Live MQTT payload schema version | [`include/Logic.h`](../include/Logic.h) | `Logic::kLivePayloadSchemaVersion` is the canonical version emitted in live/status payloads |
 | Wiring, detailed BOM, commissioning guidance, pin table | [`docs/hardware-setup.md`](./hardware-setup.md) | Human-oriented hardware source of truth |
 | Project overview, build entrypoints, verification entrypoints | [`README.md`](../README.md) | Summary only; should link to owning docs instead of duplicating them |

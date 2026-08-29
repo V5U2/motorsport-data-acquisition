@@ -10,11 +10,14 @@ using LoggerWebServer = WebServer;
 #endif
 #include "AppConfig.h"
 #include "CsvLogger.h"
+#include "RuntimeSettings.h"
 #include "Types.h"
 
 class WebUi {
  public:
-  bool begin(const AppConfig::WifiConfig &config, CsvLogger &logger);
+  bool begin(const AppConfig::WifiConfig &config,
+             CsvLogger &logger,
+             RuntimeSettings &settings);
   void handleClient();
   void publishState(const AppState &state);
   bool isReady() const;
@@ -26,15 +29,23 @@ class WebUi {
   void handleIndex();
   void handleLiveJson();
   void handleFilesJson();
+  void handleSettings();
+  void handleSettingsSave();
   void handleDownload();
   String liveJson() const;
   String indexHtml() const;
   String sensorCardsHtml() const;
+  bool settingsAuthorized();
+  static String htmlEscape(const String &value);
+  static String jsonEscape(const String &value);
 
   LoggerWebServer server_{80};
   CsvLogger *logger_ = nullptr;
+  RuntimeSettings *settings_ = nullptr;
   AppState state_{};
   bool ready_ = false;
   String mode_;
   String ipAddress_;
+  bool restartPending_ = false;
+  uint32_t restartRequestedMs_ = 0;
 };

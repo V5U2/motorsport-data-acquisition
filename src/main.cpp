@@ -9,6 +9,7 @@
 #include "CsvLogger.h"
 #include "Dashboard.h"
 #include "LiveUpload.h"
+#include "RuntimeSettings.h"
 #include "SensorChannel.h"
 #include "Timekeeper.h"
 #include "WebUi.h"
@@ -29,6 +30,7 @@ CsvLogger csvLogger;
 Dashboard dashboard;
 WebUi webUi;
 LiveUpload liveUpload;
+RuntimeSettings runtimeSettings;
 
 bool adcReady = false;
 bool rtcReady = false;
@@ -105,6 +107,7 @@ AppState buildState() {
   state.system.currentLogFile = csvLogger.currentFileName();
   state.system.lastLogError = csvLogger.lastError();
   state.system.uploadProtocol = liveUpload.protocolName();
+  state.system.uploadServer = liveUpload.serverName();
   state.system.uploadSessionId = liveUpload.sessionId();
   state.system.lastUploadError = liveUpload.lastError();
   state.system.lastUploadSequence = liveUpload.lastSequence();
@@ -193,8 +196,9 @@ void setup() {
     csvLogger.disable();
   }
 
-  wifiReady = webUi.begin(AppConfig::kWifi, csvLogger);
-  liveUpload.begin(AppConfig::kLiveUpload, AppConfig::kFeatures.liveUploadEnabled);
+  runtimeSettings.begin(AppConfig::kLiveUpload, AppConfig::kFeatures.liveUploadEnabled);
+  wifiReady = webUi.begin(AppConfig::kWifi, csvLogger, runtimeSettings);
+  liveUpload.begin(runtimeSettings.uploadConfig(), runtimeSettings.liveUploadEnabled());
   Serial.print("wifiReady=");
   Serial.println(wifiReady ? "1" : "0");
   Serial.print("wifiMode=");

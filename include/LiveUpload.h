@@ -18,6 +18,7 @@ class LiveUpload {
   bool isEnabled() const;
   bool isConnected();
   String protocolName() const;
+  String serverName() const;
   String sessionId() const;
   String lastError() const;
   uint32_t lastSequence() const;

@@ -6,8 +6,11 @@
 #include <WiFi.h>
 #endif
 
-bool WebUi::begin(const AppConfig::WifiConfig &config, CsvLogger &logger) {
+bool WebUi::begin(const AppConfig::WifiConfig &config,
+                  CsvLogger &logger,
+                  RuntimeSettings &settings) {
   logger_ = &logger;
+  settings_ = &settings;
 
   if (config.mode == AppConfig::WifiMode::Station && strlen(config.stationSsid) > 0) {
     WiFi.persistent(false);
@@ -72,7 +75,12 @@ bool WebUi::begin(const AppConfig::WifiConfig &config, CsvLogger &logger) {
   return true;
 }
 
-void WebUi::handleClient() { server_.handleClient(); }
+void WebUi::handleClient() {
+  server_.handleClient();
+  if (restartPending_ && (millis() - restartRequestedMs_) >= 750) {
+    ESP.restart();
+  }
+}
 
 void WebUi::publishState(const AppState &state) { state_ = state; }
 
@@ -86,6 +94,8 @@ void WebUi::registerRoutes() {
   server_.on("/", HTTP_GET, [this]() { handleIndex(); });
   server_.on("/api/live", HTTP_GET, [this]() { handleLiveJson(); });
   server_.on("/api/files", HTTP_GET, [this]() { handleFilesJson(); });
+  server_.on("/settings", HTTP_GET, [this]() { handleSettings(); });
+  server_.on("/settings", HTTP_POST, [this]() { handleSettingsSave(); });
   server_.onNotFound([this]() { handleDownload(); });
 }
 
@@ -99,6 +109,95 @@ void WebUi::handleFilesJson() {
     return;
   }
   server_.send(200, "application/json", logger_->listFilesJson());
+}
+
+void WebUi::handleSettings() {
+  if (!settingsAuthorized()) {
+    return;
+  }
+
+  const AppConfig::UploadConfig &upload = settings_->uploadConfig();
+  String html = R"rawliteral(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Logger Settings</title><style>body{font-family:system-ui;max-width:38rem;margin:2rem auto;padding:0 1rem;background:#09131f;color:#ecf2f8}label{display:block;margin:1rem 0}.hint{color:#95a8ba}input{box-sizing:border-box;width:100%;padding:.7rem;margin-top:.3rem}input[type=checkbox]{width:auto}button{padding:.8rem 1.2rem}a{color:#6dd6ff}</style></head><body><h1>Upstream server</h1><p class="hint">MQTT credentials remain in the local secrets header and are never returned by this page.</p><form method="post" action="/settings"><label><input type="checkbox" name="enabled" value="1")rawliteral";
+  if (settings_->liveUploadEnabled()) {
+    html += " checked";
+  }
+  html += R"rawliteral(> Enable live upload</label><label>Server host<input name="host" required maxlength="63" value=")rawliteral";
+  html += htmlEscape(upload.mqttHost);
+  html += R"rawliteral("></label><label>MQTT port<input name="port" type="number" min="1" max="65535" required value=")rawliteral";
+  html += String(upload.mqttPort);
+  html += R"rawliteral("></label><button type="submit">Save and restart</button></form><p><a href="/">Back to status</a></p></body></html>)rawliteral";
+  server_.send(200, "text/html", html);
+}
+
+void WebUi::handleSettingsSave() {
+  if (!settingsAuthorized()) {
+    return;
+  }
+
+  const String host = server_.arg("host");
+  const long portValue = server_.arg("port").toInt();
+  if (portValue < 1 || portValue > 65535 ||
+      !settings_->saveUploadServer(host, static_cast<uint16_t>(portValue),
+                                   server_.hasArg("enabled"))) {
+    server_.send(400, "text/plain", "Invalid settings");
+    return;
+  }
+
+  server_.send(200, "text/html",
+               "<!doctype html><meta name=viewport content='width=device-width'><p>Settings saved. The logger is restarting...</p>");
+  restartPending_ = true;
+  restartRequestedMs_ = millis();
+}
+
+bool WebUi::settingsAuthorized() {
+  if (strlen(AppConfig::kOta.password) == 0) {
+    server_.send(503, "text/plain", "Configure APEXI_OTA_PASSWORD before using settings");
+    return false;
+  }
+  if (!server_.authenticate("admin", AppConfig::kOta.password)) {
+    server_.requestAuthentication(DIGEST_AUTH, "MDA Logger");
+    return false;
+  }
+  return true;
+}
+
+String WebUi::htmlEscape(const String &value) {
+  String escaped;
+  escaped.reserve(value.length() + 8);
+  for (size_t index = 0; index < value.length(); ++index) {
+    switch (value[index]) {
+      case '&': escaped += "&amp;"; break;
+      case '<': escaped += "&lt;"; break;
+      case '>': escaped += "&gt;"; break;
+      case '"': escaped += "&quot;"; break;
+      case '\'': escaped += "&#39;"; break;
+      default: escaped += value[index]; break;
+    }
+  }
+  return escaped;
+}
+
+String WebUi::jsonEscape(const String &value) {
+  String escaped;
+  escaped.reserve(value.length() + 8);
+  for (size_t index = 0; index < value.length(); ++index) {
+    const char character = value[index];
+    switch (character) {
+      case '"': escaped += "\\\""; break;
+      case '\\': escaped += "\\\\"; break;
+      case '\b': escaped += "\\b"; break;
+      case '\f': escaped += "\\f"; break;
+      case '\n': escaped += "\\n"; break;
+      case '\r': escaped += "\\r"; break;
+      case '\t': escaped += "\\t"; break;
+      default:
+        if (static_cast<uint8_t>(character) >= 0x20) {
+          escaped += character;
+        }
+        break;
+    }
+  }
+  return escaped;
 }
 
 void WebUi::handleDownload() {
@@ -142,7 +241,7 @@ String WebUi::liveJson() const {
   json += "\"display_enabled\":" + String(state_.system.displayEnabled ? "true" : "false") + ",";
   json += "\"rtc_enabled\":" + String(state_.system.rtcEnabled ? "true" : "false") + ",";
   json += "\"rtc_ready\":" + String(state_.system.rtcReady ? "true" : "false") + ",";
-  json += "\"rtc_error\":\"" + state_.system.rtcError + "\",";
+  json += "\"rtc_error\":\"" + jsonEscape(state_.system.rtcError) + "\",";
   json += "\"sd_enabled\":" + String(state_.system.sdEnabled ? "true" : "false") + ",";
   json += "\"sd_ready\":" + String(state_.system.sdReady ? "true" : "false") + ",";
   json += "\"wifi_ready\":" + String(state_.system.wifiReady ? "true" : "false") + ",";
@@ -153,10 +252,12 @@ String WebUi::liveJson() const {
   json += "\"wifi_mode\":\"" + state_.system.wifiMode + "\",";
   json += "\"ip_address\":\"" + state_.system.ipAddress + "\",";
   json += "\"current_log_file\":\"" + state_.system.currentLogFile + "\",";
+  json += "\"last_log_error\":\"" + jsonEscape(state_.system.lastLogError) + "\",";
   json += "\"upload_protocol\":\"" + state_.system.uploadProtocol + "\",";
+  json += "\"upload_server\":\"" + jsonEscape(state_.system.uploadServer) + "\",";
   json += "\"upload_session_id\":\"" + state_.system.uploadSessionId + "\",";
   json += "\"upload_sequence\":" + String(state_.system.lastUploadSequence) + ",";
-  json += "\"last_upload_error\":\"" + state_.system.lastUploadError + "\"}}";
+  json += "\"last_upload_error\":\"" + jsonEscape(state_.system.lastUploadError) + "\"}}";
   return json;
 }
 
@@ -209,10 +310,12 @@ String WebUi::indexHtml() const {
       <div class="status"><span>ADC</span><span id="adcStatus">--</span></div>
       <div class="status"><span>RTC</span><span id="rtcStatus">--</span></div>
       <div class="status"><span>SD</span><span id="sdStatus">--</span></div>
-       <div class="status"><span>Upload</span><span id="uploadStatus">--</span></div>
-       <div class="status"><span>OTA</span><span id="otaStatus">--</span></div>
+      <div class="status"><span>Upload</span><span id="uploadStatus">--</span></div>
+      <div class="status"><span>Server</span><span id="uploadServer">--</span></div>
+      <div class="status"><span>OTA</span><span id="otaStatus">--</span></div>
       <div class="status"><span>Wi-Fi</span><span id="wifiStatus">--</span></div>
       <div class="status"><span>Log file</span><span id="logFile">--</span></div>
+      <div class="status"><span>Configuration</span><span><a href="/settings">Settings</a></span></div>
     </div>
     <div class="card">
       <div class="label">CSV Files</div>
@@ -232,8 +335,9 @@ String WebUi::indexHtml() const {
       document.getElementById('adcStatus').textContent = data.system.adc_ready ? 'OK' : 'FAULT';
       document.getElementById('rtcStatus').textContent = data.system.rtc_enabled ? (data.system.rtc_ready ? 'OK' : 'FAULT') : 'DISABLED';
       document.getElementById('sdStatus').textContent = data.system.sd_enabled ? (data.system.sd_ready ? 'OK' : 'FAULT') : 'DISABLED';
-       document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? 'MQTT LIVE' : 'WAITING') : 'DISABLED';
-       document.getElementById('otaStatus').textContent = data.system.ota_enabled ? (data.system.ota_ready ? 'READY' : 'LOCKED') : 'DISABLED';
+      document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? 'MQTT LIVE' : 'WAITING') : 'DISABLED';
+      document.getElementById('uploadServer').textContent = data.system.upload_server || 'Not configured';
+      document.getElementById('otaStatus').textContent = data.system.ota_enabled ? (data.system.ota_ready ? 'READY' : 'LOCKED') : 'DISABLED';
       document.getElementById('wifiStatus').textContent = data.system.wifi_mode + ' ' + data.system.ip_address;
       document.getElementById('logFile').textContent = data.system.current_log_file || '--';
     }

@@ -109,6 +109,13 @@ bool LiveUpload::isConnected() { return mqttClient_.connected(); }
 
 String LiveUpload::protocolName() const { return enabled_ ? "mqtt" : ""; }
 
+String LiveUpload::serverName() const {
+  if (strlen(config_.mqttHost) == 0) {
+    return "Not configured";
+  }
+  return String(config_.mqttHost) + ":" + String(config_.mqttPort);
+}
+
 String LiveUpload::sessionId() const { return sessionId_; }
 
 String LiveUpload::lastError() const { return lastError_; }

@@ -42,6 +42,7 @@ struct SystemStatus {
   String currentLogFile;
   String lastLogError;
   String uploadProtocol;
+  String uploadServer;
   String uploadSessionId;
   String lastUploadError;
   uint32_t lastUploadSequence;

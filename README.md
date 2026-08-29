@@ -58,6 +58,10 @@ An IP address can be supplied instead if `.local` discovery is unavailable. Do n
 
 The firmware now includes a live telemetry publisher for near-real-time upload. The current implementation uses MQTT for the live path and is disabled by default. Enable it in [`include/AppConfig.h`](include/AppConfig.h), switch Wi-Fi to station mode, and configure the broker and credentials in an ignored `include/AppSecrets.h` created from [`include/AppSecrets.example.h`](include/AppSecrets.example.h).
 
+The local dashboard shows the active upstream server and MQTT connection state. Open `/settings` to change the MQTT host, port, and live-upload enable flag; the page uses HTTP Digest authentication with username `admin` and the device's OTA password. These non-secret settings are stored in a checksummed flash-backed EEPROM record and survive power loss. MQTT credentials remain compiled from the ignored secrets header and are not exposed in the UI or API. Saving settings restarts the logger so the new endpoint is applied cleanly.
+
+The NodeMCU target has 4 MB onboard flash using the `eagle.flash.4m1m.ld` layout, which reserves 1 MB for a filesystem in addition to the small EEPROM-emulation record used here. The filesystem remains available for future queues or configuration artifacts; durable telemetry continues to belong on microSD to avoid unnecessary flash wear.
+
 Production brokers require authentication. Set `APEXI_MQTT_USERNAME` to the same normalized value as `kLiveUpload.deviceId`; the broker ACL uses that identity to limit the device to `<topicPrefix>/<deviceId>/live` and `<topicPrefix>/<deviceId>/status`. Keep the matching password in the encrypted infrastructure vault and never commit `AppSecrets.h`.
 
 Current behavior:
