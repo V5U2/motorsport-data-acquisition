@@ -143,6 +143,11 @@ void setup() {
   Serial.println("MDA logger boot");
   Serial.flush();
 
+  // The NodeMCU built-in LED is active low. A steady light confirms that the
+  // MCU has power and has reached firmware setup rather than remaining in reset.
+  pinMode(AppConfig::kPins.statusLed, OUTPUT);
+  digitalWrite(AppConfig::kPins.statusLed, LOW);
+
   pinMode(AppConfig::kPins.buttonPin, INPUT_PULLUP);
   if (AppConfig::kFeatures.displayEnabled) {
     pinMode(AppConfig::kPins.tftCs, OUTPUT);

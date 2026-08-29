@@ -76,11 +76,12 @@ Use the board's printed `D` label when wiring. The firmware stores the correspon
 | TFT CS | D8 | GPIO 15 | Optional; must remain low during boot |
 | TFT DC | D3 | GPIO 0 | Optional; must remain high during boot |
 | TFT RST | D4 | GPIO 2 | Optional; must remain high during boot |
+| Built-in status LED | D4 | GPIO 2 | Active low; steady on after firmware setup confirms MCU power/running state |
 | TFT BL | Supply | n/a | Hard-wire to the display's rated supply; no GPIO default |
 | SD CS | D0 | GPIO 16 | Optional microSD chip select |
 | UI button | RX | GPIO 3 | Optional active-low button; serial diagnostics use TX only |
 
-For the current two-sensor build, both receiver signals terminate at the ADS1115, so only power, ground, D1, and D2 are required between the NodeMCU and ADS1115. D3, D4, and D8 are ESP8266 boot-strapping pins; never attach a peripheral that drives them to the wrong level during reset. Update [`include/PinDefinitions.h`](../include/PinDefinitions.h) and re-verify the boot state if the optional pin assignment changes.
+For the current two-sensor build, both receiver signals terminate at the ADS1115, so only power, ground, D1, and D2 are required between the NodeMCU and ADS1115. D3, D4, and D8 are ESP8266 boot-strapping pins; never attach a peripheral that drives them to the wrong level during reset. The built-in LED and optional TFT reset currently share D4, so remap `PIN_TFT_RST` before enabling the TFT. Update [`include/PinDefinitions.h`](../include/PinDefinitions.h) and re-verify the boot state if the optional pin assignment changes.
 
 Update the values in [`include/PinDefinitions.h`](../include/PinDefinitions.h) if the actual wiring differs.
 

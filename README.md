@@ -8,6 +8,7 @@ ESP8266 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger
 - Logs CSV data to microSD with RTC timestamps when RTC hardware is fitted
 - Serves a lightweight Wi-Fi dashboard and CSV download endpoints
 - Publishes live telemetry over MQTT when station Wi-Fi and broker settings are configured
+- Lights the NodeMCU built-in LED steadily once firmware setup begins
 - Keeps pin mapping, sensor calibration, and refresh rates in one config file
 
 ## Required hardware

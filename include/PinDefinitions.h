@@ -19,3 +19,4 @@
 #define PIN_SD_CS 16     // D0
 
 #define PIN_UI_BUTTON 3  // RX; firmware only transmits serial diagnostics
+#define PIN_STATUS_LED 2 // D4; NodeMCU built-in LED, active low

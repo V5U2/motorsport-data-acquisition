@@ -119,6 +119,7 @@ struct PinConfig {
   int8_t tftBacklight;
   uint8_t sdCs;
   uint8_t buttonPin;
+  uint8_t statusLed;
 };
 
 struct DisplayConfig {
@@ -139,6 +140,7 @@ inline constexpr PinConfig kPins{
     PIN_TFT_BL,
     PIN_SD_CS,
     PIN_UI_BUTTON,
+    PIN_STATUS_LED,
 };
 
 inline constexpr RtcConfig kRtc{
