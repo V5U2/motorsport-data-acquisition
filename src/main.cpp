@@ -1,4 +1,5 @@
 #include <Adafruit_ADS1X15.h>
+#include <ArduinoOTA.h>
 #include <array>
 #include <SPI.h>
 #include <Wire.h>
@@ -31,6 +32,7 @@ LiveUpload liveUpload;
 bool adcReady = false;
 bool rtcReady = false;
 bool wifiReady = false;
+bool otaReady = false;
 
 uint32_t lastSampleMs = 0;
 uint32_t lastDisplayMs = 0;
@@ -90,6 +92,8 @@ AppState buildState() {
   state.system.wifiReady = wifiReady;
   state.system.uploadEnabled = liveUpload.isEnabled();
   state.system.uploadConnected = liveUpload.isConnected();
+  state.system.otaEnabled = AppConfig::kFeatures.otaUpdatesEnabled;
+  state.system.otaReady = otaReady;
   state.system.wifiMode = webUi.modeString();
   state.system.ipAddress = webUi.ipAddress();
   state.system.currentLogFile = csvLogger.currentFileName();
@@ -107,6 +111,25 @@ void sampleSensors() {
     const float voltage = adcReady ? readVoltage(config.adsChannel) : 0.0f;
     sensorChannels[index].update(voltage, adcReady);
   }
+}
+
+void beginOta() {
+  if (!AppConfig::kFeatures.otaUpdatesEnabled || !wifiReady ||
+      webUi.modeString() != "STA" || strlen(AppConfig::kOta.password) == 0) {
+    otaReady = false;
+    return;
+  }
+
+  ArduinoOTA.setHostname(AppConfig::kOta.hostname);
+  ArduinoOTA.setPassword(AppConfig::kOta.password);
+  ArduinoOTA.onStart([]() { Serial.println("OTA update started"); });
+  ArduinoOTA.onEnd([]() { Serial.println("OTA update complete"); });
+  ArduinoOTA.onError([](ota_error_t error) {
+    Serial.print("OTA error=");
+    Serial.println(static_cast<unsigned int>(error));
+  });
+  ArduinoOTA.begin();
+  otaReady = true;
 }
 
 }  // namespace
@@ -146,6 +169,9 @@ void setup() {
   Serial.println(webUi.modeString());
   Serial.print("ip=");
   Serial.println(webUi.ipAddress());
+  beginOta();
+  Serial.print("otaReady=");
+  Serial.println(otaReady ? "1" : "0");
 
   Wire.begin(AppConfig::kPins.i2cSda, AppConfig::kPins.i2cScl);
   spiBus.begin();
@@ -179,6 +205,9 @@ void loop() {
   handleButton();
   webUi.handleClient();
   liveUpload.loop();
+  if (otaReady) {
+    ArduinoOTA.handle();
+  }
 
   const uint32_t nowMs = millis();
 

@@ -9,7 +9,7 @@ This repo uses a small set of source-of-truth files for the important facts, and
 | PlatformIO environment and board target | [`platformio.ini`](../platformio.ini) | Canonical source for build env name, board ID, and build flags |
 | Pin map | [`include/PinDefinitions.h`](../include/PinDefinitions.h) | Canonical source for NodeMCU D-label/GPIO assignments |
 | Display wiring handoff | [`include/TFT_Setup.h`](../include/TFT_Setup.h) | Must consume the pin macros from `PinDefinitions.h` |
-| Feature toggles, RTC selection, sensor config, upload config | [`include/AppConfig.h`](../include/AppConfig.h) | Canonical source for firmware configuration defaults |
+| Feature toggles, RTC selection, sensor config, MQTT and OTA config | [`include/AppConfig.h`](../include/AppConfig.h) | Canonical source for firmware configuration defaults |
 | Live MQTT payload schema version | [`include/Logic.h`](../include/Logic.h) | `Logic::kLivePayloadSchemaVersion` is the canonical version emitted in live/status payloads |
 | Wiring, detailed BOM, commissioning guidance, pin table | [`docs/hardware-setup.md`](./hardware-setup.md) | Human-oriented hardware source of truth |
 | Project overview, build entrypoints, verification entrypoints | [`README.md`](../README.md) | Summary only; should link to owning docs instead of duplicating them |
@@ -48,7 +48,7 @@ This must run:
 
 - If the board target changes, update [`platformio.ini`](../platformio.ini) first, then align the workflows.
 - If the pin map changes, update [`include/PinDefinitions.h`](../include/PinDefinitions.h) first, then align [`include/TFT_Setup.h`](../include/TFT_Setup.h) and [`docs/hardware-setup.md`](./hardware-setup.md).
-- If RTC, display, SD, or live-upload defaults change, update [`include/AppConfig.h`](../include/AppConfig.h) first, then align docs.
+- If RTC, display, SD, live-upload, or OTA defaults change, update [`include/AppConfig.h`](../include/AppConfig.h) first, then align docs.
 - If live/status MQTT payload shape changes incompatibly, bump `Logic::kLivePayloadSchemaVersion`, keep version `1` compatibility documented, and align bridge/app tests before rollout.
 - Keep README concise. Detailed hardware descriptions belong in [`docs/hardware-setup.md`](./hardware-setup.md).
 - Add new durable docs only when they reduce ambiguity that cannot be enforced another way.

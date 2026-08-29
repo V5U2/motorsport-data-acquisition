@@ -14,6 +14,9 @@
 #ifndef APEXI_WIFI_STATION_PASSWORD
 #define APEXI_WIFI_STATION_PASSWORD ""
 #endif
+#ifndef APEXI_OTA_PASSWORD
+#define APEXI_OTA_PASSWORD ""
+#endif
 #ifndef APEXI_MQTT_HOST
 #define APEXI_MQTT_HOST ""
 #endif
@@ -80,6 +83,12 @@ struct FeatureConfig {
   bool rtcEnabled;
   bool sdLoggingEnabled;
   bool liveUploadEnabled;
+  bool otaUpdatesEnabled;
+};
+
+struct OtaConfig {
+  const char *hostname;
+  const char *password;
 };
 
 struct UploadConfig {
@@ -137,8 +146,8 @@ inline constexpr RtcConfig kRtc{
     kRv3028Address,
 };
 
-// Current bench configuration: pressure transmitter on ADS1115 A0 only.
-inline constexpr std::array<SensorConfig, 1> kSensorConfigs{{
+// Current bench configuration: pressure on ADS1115 A0 and temperature on A1.
+inline constexpr std::array<SensorConfig, 2> kSensorConfigs{{
     {
         "oil_pressure",
         "Oil Pressure",
@@ -150,6 +159,19 @@ inline constexpr std::array<SensorConfig, 1> kSensorConfigs{{
         "bar",
         1.5f,
         7.5f,
+        0.18f,
+    },
+    {
+        "oil_temperature",
+        "Oil Temp",
+        1,
+        4.0f,
+        20.0f,
+        0.0f,
+        150.0f,
+        "C",
+        70.0f,
+        125.0f,
         0.18f,
     },
 }};
@@ -180,6 +202,12 @@ inline constexpr FeatureConfig kFeatures{
     false,
     false,
     false,
+    true,
+};
+
+inline constexpr OtaConfig kOta{
+    "mda-logger",
+    APEXI_OTA_PASSWORD,
 };
 
 inline constexpr UploadConfig kLiveUpload{

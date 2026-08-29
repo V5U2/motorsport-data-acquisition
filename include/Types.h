@@ -34,6 +34,8 @@ struct SystemStatus {
   bool wifiReady;
   bool uploadEnabled;
   bool uploadConnected;
+  bool otaEnabled;
+  bool otaReady;
   String wifiMode;
   String ipAddress;
   String currentLogFile;

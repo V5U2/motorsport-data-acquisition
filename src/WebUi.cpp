@@ -147,6 +147,8 @@ String WebUi::liveJson() const {
   json += "\"wifi_ready\":" + String(state_.system.wifiReady ? "true" : "false") + ",";
   json += "\"upload_enabled\":" + String(state_.system.uploadEnabled ? "true" : "false") + ",";
   json += "\"upload_connected\":" + String(state_.system.uploadConnected ? "true" : "false") + ",";
+  json += "\"ota_enabled\":" + String(state_.system.otaEnabled ? "true" : "false") + ",";
+  json += "\"ota_ready\":" + String(state_.system.otaReady ? "true" : "false") + ",";
   json += "\"wifi_mode\":\"" + state_.system.wifiMode + "\",";
   json += "\"ip_address\":\"" + state_.system.ipAddress + "\",";
   json += "\"current_log_file\":\"" + state_.system.currentLogFile + "\",";
@@ -206,7 +208,8 @@ String WebUi::indexHtml() const {
       <div class="status"><span>ADC</span><span id="adcStatus">--</span></div>
       <div class="status"><span>RTC</span><span id="rtcStatus">--</span></div>
       <div class="status"><span>SD</span><span id="sdStatus">--</span></div>
-      <div class="status"><span>Upload</span><span id="uploadStatus">--</span></div>
+       <div class="status"><span>Upload</span><span id="uploadStatus">--</span></div>
+       <div class="status"><span>OTA</span><span id="otaStatus">--</span></div>
       <div class="status"><span>Wi-Fi</span><span id="wifiStatus">--</span></div>
       <div class="status"><span>Log file</span><span id="logFile">--</span></div>
     </div>
@@ -228,7 +231,8 @@ String WebUi::indexHtml() const {
       document.getElementById('adcStatus').textContent = data.system.adc_ready ? 'OK' : 'FAULT';
       document.getElementById('rtcStatus').textContent = data.system.rtc_enabled ? (data.system.rtc_ready ? 'OK' : 'FAULT') : 'DISABLED';
       document.getElementById('sdStatus').textContent = data.system.sd_enabled ? (data.system.sd_ready ? 'OK' : 'FAULT') : 'DISABLED';
-      document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? 'MQTT LIVE' : 'WAITING') : 'DISABLED';
+       document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? 'MQTT LIVE' : 'WAITING') : 'DISABLED';
+       document.getElementById('otaStatus').textContent = data.system.ota_enabled ? (data.system.ota_ready ? 'READY' : 'LOCKED') : 'DISABLED';
       document.getElementById('wifiStatus').textContent = data.system.wifi_mode + ' ' + data.system.ip_address;
       document.getElementById('logFile').textContent = data.system.current_log_file || '--';
     }

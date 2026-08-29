@@ -39,6 +39,10 @@ grep -q "docs/repo-contracts.md" "$ROOT_DIR/AGENTS.md" || fail "AGENTS.md does n
 
 git -C "$ROOT_DIR" check-ignore --quiet include/AppSecrets.h || \
   fail "include/AppSecrets.h must remain ignored"
+grep -q "APEXI_OTA_PASSWORD" "$ROOT_DIR/include/AppSecrets.example.h" || \
+  fail "include/AppSecrets.example.h must document APEXI_OTA_PASSWORD"
+grep -q "upload_protocol = espota" "$ROOT_DIR/platformio.ini" || \
+  fail "platformio.ini must provide the OTA upload environment"
 if git -C "$ROOT_DIR" ls-files --error-unmatch -- include/AppSecrets.h >/dev/null 2>&1; then
   fail "include/AppSecrets.h contains local credentials and must not be tracked"
 fi

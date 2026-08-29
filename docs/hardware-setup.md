@@ -32,7 +32,7 @@
 - Protected 12 V -> sensor `+`
 - Sensor loop output/current return -> 4-20 mA receiver module input
 - Receiver module analog output -> ADS1115 A0 for oil pressure
-- Reserve ADS1115 A1 for the replacement oil-temperature transmitter when it is fitted and re-enabled in `AppConfig::kSensorConfigs`
+- Second receiver module analog output -> ADS1115 A1 for oil temperature
 - ADS1115 GND -> system ground
 
 ### Shared buses
@@ -80,7 +80,7 @@ Use the board's printed `D` label when wiring. The firmware stores the correspon
 | SD CS | D0 | GPIO 16 | Optional microSD chip select |
 | UI button | RX | GPIO 3 | Optional active-low button; serial diagnostics use TX only |
 
-For the current pressure-only build, wire only power, ground, D1, and D2 between the NodeMCU and ADS1115. D3, D4, and D8 are ESP8266 boot-strapping pins; never attach a peripheral that drives them to the wrong level during reset. Update [`include/PinDefinitions.h`](../include/PinDefinitions.h) and re-verify the boot state if the optional pin assignment changes.
+For the current two-sensor build, both receiver signals terminate at the ADS1115, so only power, ground, D1, and D2 are required between the NodeMCU and ADS1115. D3, D4, and D8 are ESP8266 boot-strapping pins; never attach a peripheral that drives them to the wrong level during reset. Update [`include/PinDefinitions.h`](../include/PinDefinitions.h) and re-verify the boot state if the optional pin assignment changes.
 
 Update the values in [`include/PinDefinitions.h`](../include/PinDefinitions.h) if the actual wiring differs.
 
