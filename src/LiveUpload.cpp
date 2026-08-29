@@ -12,6 +12,8 @@
 namespace {
 
 constexpr uint16_t kMqttBufferSize = 2048;
+constexpr uint16_t kMqttSocketTimeoutSeconds = 1;
+constexpr uint32_t kNetworkClientTimeoutMs = 500;
 
 }  // namespace
 
@@ -36,6 +38,8 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config, const bool enabled
 
   mqttClient_.setServer(config_.mqttHost, config_.mqttPort);
   mqttClient_.setBufferSize(kMqttBufferSize);
+  mqttClient_.setSocketTimeout(kMqttSocketTimeoutSeconds);
+  networkClient_.setTimeout(kNetworkClientTimeoutMs);
 
   if (!enabled_) {
     lastError_ = "Live upload disabled";
@@ -132,8 +136,6 @@ bool LiveUpload::reconnect(const uint32_t nowMs) {
     return false;
   }
 
-  lastReconnectAttemptMs_ = nowMs;
-
   bool connected = false;
   const String willPayload = buildStatusJson(false);
   if (strlen(config_.mqttUsername) > 0) {
@@ -148,6 +150,11 @@ bool LiveUpload::reconnect(const uint32_t nowMs) {
     connected =
         mqttClient_.connect(clientId_.c_str(), statusTopic().c_str(), 0, true, willPayload.c_str());
   }
+
+  // Start the backoff after the blocking client call completes. Otherwise an
+  // attempt lasting longer than the configured interval is retried immediately
+  // and starves sensor sampling, OTA, and the web server.
+  lastReconnectAttemptMs_ = millis();
 
   if (!connected) {
     lastError_ = "MQTT connect failed rc=" + String(mqttClient_.state());
