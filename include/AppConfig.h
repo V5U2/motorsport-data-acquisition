@@ -201,7 +201,7 @@ inline constexpr WifiConfig kWifi{
 
 inline constexpr FeatureConfig kFeatures{
     false,
-    false,
+    true,
     false,
     false,
     true,

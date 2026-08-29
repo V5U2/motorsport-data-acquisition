@@ -10,6 +10,7 @@ class Timekeeper {
  public:
   void disable();
   bool begin(TwoWire &wire, const AppConfig::RtcConfig &config);
+  bool setFromUnixTime(uint32_t utcEpoch, int32_t utcOffsetSeconds);
   bool isReady() const;
   String logTimestamp(uint32_t uptimeMs);
   String dateStamp();
@@ -38,8 +39,10 @@ class Timekeeper {
   bool readRv3028(CalendarTime &time);
   bool readRv3028Register(uint8_t reg, uint8_t &value);
   bool writeRv3028Register(uint8_t reg, uint8_t value);
+  bool writeRv3028Time(const CalendarTime &time);
   bool readRv3028Burst(uint8_t startReg, uint8_t *buffer, size_t length);
   static uint8_t bcdToDec(uint8_t value);
+  static uint8_t decToBcd(uint8_t value);
 
   RTC_DS3231 rtc_;
   TwoWire *wire_ = nullptr;

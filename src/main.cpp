@@ -2,6 +2,7 @@
 #include <ArduinoOTA.h>
 #include <array>
 #include <SPI.h>
+#include <time.h>
 #include <Wire.h>
 
 #include "AppConfig.h"
@@ -43,6 +44,10 @@ uint32_t lastSerialMs = 0;
 bool buttonLastLevel = HIGH;
 uint32_t buttonPressedAtMs = 0;
 bool longPressHandled = false;
+
+constexpr uint32_t kValidNetworkEpoch = 1704067200UL;  // 2024-01-01 UTC
+constexpr int32_t kPerthUtcOffsetSeconds = 8 * 60 * 60;
+constexpr uint32_t kNtpSyncTimeoutMs = 10000;
 
 float readVoltage(const uint8_t channel) {
   const int16_t raw = ads.readADC_SingleEnded(channel);
@@ -87,6 +92,7 @@ AppState buildState() {
   state.system.displayEnabled = AppConfig::kFeatures.displayEnabled;
   state.system.rtcEnabled = AppConfig::kFeatures.rtcEnabled;
   state.system.rtcReady = rtcReady;
+  state.system.rtcError = timekeeper.lastError();
   state.system.sdEnabled = AppConfig::kFeatures.sdLoggingEnabled;
   state.system.sdReady = csvLogger.isReady() && csvLogger.lastError().isEmpty();
   state.system.wifiReady = wifiReady;
@@ -130,6 +136,27 @@ void beginOta() {
   });
   ArduinoOTA.begin();
   otaReady = true;
+}
+
+void initialiseRtcFromNetwork() {
+  if (rtcReady || !wifiReady || webUi.modeString() != "STA") {
+    return;
+  }
+
+  configTime(0, 0, "pool.ntp.org", "time.google.com");
+  const uint32_t startedMs = millis();
+  time_t now = time(nullptr);
+  while (now < static_cast<time_t>(kValidNetworkEpoch) &&
+         (millis() - startedMs) < kNtpSyncTimeoutMs) {
+    ArduinoOTA.handle();
+    delay(100);
+    now = time(nullptr);
+  }
+
+  if (now >= static_cast<time_t>(kValidNetworkEpoch)) {
+    rtcReady = timekeeper.setFromUnixTime(static_cast<uint32_t>(now),
+                                          kPerthUtcOffsetSeconds);
+  }
 }
 
 }  // namespace
@@ -191,6 +218,7 @@ void setup() {
 
   if (AppConfig::kFeatures.rtcEnabled) {
     rtcReady = timekeeper.begin(Wire, AppConfig::kRtc);
+    initialiseRtcFromNetwork();
   }
 
   if (AppConfig::kFeatures.sdLoggingEnabled) {

@@ -29,6 +29,7 @@ struct SystemStatus {
   bool displayEnabled;
   bool rtcEnabled;
   bool rtcReady;
+  String rtcError;
   bool sdEnabled;
   bool sdReady;
   bool wifiReady;

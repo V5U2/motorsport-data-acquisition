@@ -142,6 +142,7 @@ String WebUi::liveJson() const {
   json += "\"display_enabled\":" + String(state_.system.displayEnabled ? "true" : "false") + ",";
   json += "\"rtc_enabled\":" + String(state_.system.rtcEnabled ? "true" : "false") + ",";
   json += "\"rtc_ready\":" + String(state_.system.rtcReady ? "true" : "false") + ",";
+  json += "\"rtc_error\":\"" + state_.system.rtcError + "\",";
   json += "\"sd_enabled\":" + String(state_.system.sdEnabled ? "true" : "false") + ",";
   json += "\"sd_ready\":" + String(state_.system.sdReady ? "true" : "false") + ",";
   json += "\"wifi_ready\":" + String(state_.system.wifiReady ? "true" : "false") + ",";

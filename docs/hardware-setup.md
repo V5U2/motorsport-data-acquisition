@@ -6,7 +6,7 @@
 - Sensor interface: 2x DFRobot SEN0262 current-to-voltage modules
 - Power: DFRobot DFR1015 buck converter for the regulated rail
 - UI button: DFRobot DFR0029-W digital push button
-- Optional RTC: generic I2C DS3231 or RV-3028 module
+- RTC: RV-3028-C7 on the Unexpected Maker RTC Logger Shield, sharing the primary I2C bus with the ADS1115
 - Optional storage: 3.3 V-compatible SPI microSD module
 - Optional display: 480x320 SPI TFT using ST7796S
 
@@ -103,7 +103,7 @@ Update the values in [`include/PinDefinitions.h`](../include/PinDefinitions.h) i
 | Qty | Item | Purpose | Notes |
 | --- | --- | --- | --- |
 | 1 | [3.5 inch 480x320 SPI TFT with ST7796S controller](https://core-electronics.com.au/catalog/product/view/sku/WS-15811) | Local dashboard display | Optional; if fitted, leave `displayEnabled` on in [`include/AppConfig.h`](../include/AppConfig.h) |
-| 1 | 3.3 V-compatible DS3231 or RV-3028 I2C RTC module | Timestamps without network time | Optional; shares D2/D1 with the ADS1115 |
+| 1 | Unexpected Maker RTC Logger Shield with RV-3028-C7 | Timestamps without network time | Enabled; shield GPIO 8/SDA connects to D2 and GPIO 9/SCL connects to D1 |
 | 1 | 3.3 V-compatible SPI microSD module | Durable local CSV storage | Optional; uses D5/D6/D7 plus D0 chip select |
 | 1 | [24 V boost regulator for loop-powered sensors (Pololu U3V9F24, item 5588)](https://core-electronics.com.au/catalog/product/view/sku/POLOLU-5588) | Generates a dedicated 24 V sensor supply from the 12 V system rail | Optional; use only when a transmitter needs 24 V loop power and place it after the [Pololu 5380 reverse-voltage protector](https://core-electronics.com.au/pololu-reverse-voltage-protector-4-60v-10a.html) |
 
@@ -115,7 +115,7 @@ Optional hardware toggles:
 - Set `AppConfig::kFeatures.rtcEnabled` to `false` when no RTC hardware is fitted.
 - Set `AppConfig::kFeatures.sdLoggingEnabled` to `false` when no SD hardware is fitted.
 
-The default is station mode using credentials from the ignored `include/AppSecrets.h`. The ESP8266 performs a normal all-channel scan rather than pinning a BSSID or channel. If association fails within 30 seconds, it exposes the open fallback SoftAP `MDA-LOGGER` on 2.4 GHz channel 6 at `http://192.168.44.1`. Leave `apPassword` empty for an open recovery AP or set an 8+ character WPA2 password. Change `AppConfig::kWifi.apAddress` if that subnet is already in use.
+The default is station mode using credentials from the ignored `include/AppSecrets.h`. The ESP8266 performs a normal all-channel scan rather than pinning a BSSID or channel. If the RV-3028 reports power loss or an invalid calendar, station-mode firmware obtains network time and writes Perth local time into the RTC before normal sampling. If association fails within 30 seconds, it exposes the open fallback SoftAP `MDA-LOGGER` on 2.4 GHz channel 6 at `http://192.168.44.1`. Leave `apPassword` empty for an open recovery AP or set an 8+ character WPA2 password. Change `AppConfig::kWifi.apAddress` if that subnet is already in use.
 
 For station Wi-Fi or live MQTT commissioning, copy [`include/AppSecrets.example.h`](../include/AppSecrets.example.h) to the git-ignored `include/AppSecrets.h`. Keep Wi-Fi and broker passwords in that local file. An authenticated production broker requires `APEXI_MQTT_USERNAME` to equal the normalized `AppConfig::kLiveUpload.deviceId`; firmware startup rejects a mismatched identity before connecting. Provision the matching password in the infrastructure vault.
 
