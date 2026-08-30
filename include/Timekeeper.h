@@ -10,7 +10,7 @@ class Timekeeper {
  public:
   void disable();
   bool begin(TwoWire &wire, const AppConfig::RtcConfig &config);
-  bool setFromUnixTime(uint32_t utcEpoch, int32_t utcOffsetSeconds);
+  bool setFromUnixTime(uint32_t utcEpoch);
   bool isReady() const;
   String logTimestamp(uint32_t uptimeMs);
   String dateStamp();

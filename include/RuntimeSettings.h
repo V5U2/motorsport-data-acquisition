@@ -7,18 +7,31 @@
 class RuntimeSettings {
  public:
   bool begin(const AppConfig::UploadConfig &defaults, bool defaultUploadEnabled);
-  bool saveUploadServer(const String &host, uint16_t port, bool enabled);
+  bool save(const String &host,
+            uint16_t port,
+            bool enabled,
+            const String &ntpPrimary,
+            const String &ntpSecondary,
+            const String &timeZoneRule,
+            const String &timeZoneLabel);
 
   const AppConfig::UploadConfig &uploadConfig() const;
   bool liveUploadEnabled() const;
   String uploadServerLabel() const;
+  const char *ntpPrimary() const;
+  const char *ntpSecondary() const;
+  const char *timeZoneRule() const;
+  const char *timeZoneLabel() const;
 
  private:
   static constexpr uint32_t kMagic = 0x4D444131UL;
-  static constexpr uint16_t kVersion = 1;
+  static constexpr uint16_t kVersion = 2;
   static constexpr size_t kHostCapacity = 64;
+  static constexpr size_t kNtpCapacity = 64;
+  static constexpr size_t kTimeZoneRuleCapacity = 64;
+  static constexpr size_t kTimeZoneLabelCapacity = 32;
 
-  struct Record {
+  struct LegacyRecord {
     uint32_t magic;
     uint16_t version;
     uint16_t size;
@@ -29,12 +42,37 @@ class RuntimeSettings {
     uint32_t checksum;
   };
 
+  struct Record {
+    uint32_t magic;
+    uint16_t version;
+    uint16_t size;
+    uint8_t uploadEnabled;
+    uint8_t reserved;
+    uint16_t mqttPort;
+    char mqttHost[kHostCapacity];
+    char ntpPrimary[kNtpCapacity];
+    char ntpSecondary[kNtpCapacity];
+    char timeZoneRule[kTimeZoneRuleCapacity];
+    char timeZoneLabel[kTimeZoneLabelCapacity];
+    uint32_t checksum;
+  };
+
   static uint32_t checksum(const Record &record);
+  static uint32_t checksum(const LegacyRecord &record);
   static bool valid(const Record &record);
+  static bool valid(const LegacyRecord &record);
+  static bool validText(const String &value, size_t capacity);
+  void populateDefaults(Record &record,
+                        const AppConfig::UploadConfig &defaults,
+                        bool defaultUploadEnabled);
   void apply(const Record &record);
 
   AppConfig::UploadConfig defaults_{};
   AppConfig::UploadConfig uploadConfig_{};
   char mqttHost_[kHostCapacity]{};
+  char ntpPrimary_[kNtpCapacity]{};
+  char ntpSecondary_[kNtpCapacity]{};
+  char timeZoneRule_[kTimeZoneRuleCapacity]{};
+  char timeZoneLabel_[kTimeZoneLabelCapacity]{};
   bool uploadEnabled_ = false;
 };

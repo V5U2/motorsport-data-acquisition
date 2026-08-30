@@ -52,7 +52,6 @@ uint32_t buttonPressedAtMs = 0;
 bool longPressHandled = false;
 
 constexpr uint32_t kValidNetworkEpoch = 1704067200UL;  // 2024-01-01 UTC
-constexpr int32_t kPerthUtcOffsetSeconds = 8 * 60 * 60;
 constexpr uint32_t kNtpSyncTimeoutMs = 10000;
 constexpr uint32_t kRtcSyncRetryIntervalMs = 60000;
 constexpr uint32_t kRtcResyncIntervalMs = 60UL * 60UL * 1000UL;
@@ -105,6 +104,7 @@ AppState buildState() {
   state.system.rtcSynced = rtcNetworkSynced;
   state.system.rtcError = timekeeper.lastError();
   state.system.rtcLastSync = rtcLastSync;
+  state.system.timeZone = runtimeSettings.timeZoneLabel();
   state.system.sdEnabled = AppConfig::kFeatures.sdLoggingEnabled;
   state.system.sdReady = csvLogger.isReady() && csvLogger.lastError().isEmpty();
   state.system.wifiReady = wifiReady;
@@ -158,7 +158,9 @@ bool syncRtcFromNetwork(const bool waitForInitialSync) {
   }
 
   if (!networkTimeConfigured) {
-    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    configTime(runtimeSettings.timeZoneRule(),
+               runtimeSettings.ntpPrimary(),
+               runtimeSettings.ntpSecondary());
     networkTimeConfigured = true;
   }
 
@@ -175,12 +177,12 @@ bool syncRtcFromNetwork(const bool waitForInitialSync) {
   }
 
   if (now >= static_cast<time_t>(kValidNetworkEpoch)) {
-    rtcReady = timekeeper.setFromUnixTime(static_cast<uint32_t>(now),
-                                          kPerthUtcOffsetSeconds);
+    rtcReady = timekeeper.setFromUnixTime(static_cast<uint32_t>(now));
     if (rtcReady) {
       rtcNetworkSynced = true;
       lastRtcSuccessfulSyncMs = millis();
-      rtcLastSync = timekeeper.logTimestamp(lastRtcSuccessfulSyncMs) + " AWST";
+      rtcLastSync = timekeeper.logTimestamp(lastRtcSuccessfulSyncMs) + " " +
+                    runtimeSettings.timeZoneLabel();
       return true;
     }
   }

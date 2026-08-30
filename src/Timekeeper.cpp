@@ -104,10 +104,10 @@ bool Timekeeper::beginRv3028(TwoWire &wire, const uint8_t address) {
 
 bool Timekeeper::isReady() const { return ready_; }
 
-bool Timekeeper::setFromUnixTime(const uint32_t utcEpoch, const int32_t utcOffsetSeconds) {
-  const time_t localEpoch = static_cast<time_t>(utcEpoch + utcOffsetSeconds);
+bool Timekeeper::setFromUnixTime(const uint32_t utcEpoch) {
+  const time_t localEpoch = static_cast<time_t>(utcEpoch);
   struct tm localTime {};
-  if (gmtime_r(&localEpoch, &localTime) == nullptr || localTime.tm_year < 124) {
+  if (localtime_r(&localEpoch, &localTime) == nullptr || localTime.tm_year < 124) {
     ready_ = false;
     lastError_ = "Network time invalid";
     return false;

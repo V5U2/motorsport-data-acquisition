@@ -32,6 +32,7 @@ struct SystemStatus {
   bool rtcSynced;
   String rtcError;
   String rtcLastSync;
+  String timeZone;
   bool sdEnabled;
   bool sdReady;
   bool wifiReady;

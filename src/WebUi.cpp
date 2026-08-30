@@ -117,7 +117,7 @@ void WebUi::handleSettings() {
   }
 
   const AppConfig::UploadConfig &upload = settings_->uploadConfig();
-  String html = R"rawliteral(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Logger Settings</title><style>body{font-family:system-ui;max-width:38rem;margin:2rem auto;padding:0 1rem;background:#09131f;color:#ecf2f8}label{display:block;margin:1rem 0}.hint{color:#95a8ba}input{box-sizing:border-box;width:100%;padding:.7rem;margin-top:.3rem}input[type=checkbox]{width:auto}button{padding:.8rem 1.2rem}a{color:#6dd6ff}</style></head><body><h1>Upstream server</h1><p class="hint">MQTT credentials remain in the local secrets header and are never returned by this page.</p><form method="post" action="/settings"><label><input type="checkbox" name="enabled" value="1")rawliteral";
+  String html = R"rawliteral(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Logger Settings</title><style>body{font-family:system-ui;max-width:38rem;margin:2rem auto;padding:0 1rem;background:#09131f;color:#ecf2f8}label{display:block;margin:1rem 0}.hint{color:#95a8ba}input{box-sizing:border-box;width:100%;padding:.7rem;margin-top:.3rem}input[type=checkbox]{width:auto}button{padding:.8rem 1.2rem}a{color:#6dd6ff}h2{margin-top:2rem}</style></head><body><h1>Device settings</h1><form method="post" action="/settings"><h2>Upstream server</h2><p class="hint">MQTT credentials remain in the local secrets header and are never returned by this page.</p><label><input type="checkbox" name="enabled" value="1")rawliteral";
   if (settings_->liveUploadEnabled()) {
     html += " checked";
   }
@@ -125,6 +125,14 @@ void WebUi::handleSettings() {
   html += htmlEscape(upload.mqttHost);
   html += R"rawliteral("></label><label>MQTT port<input name="port" type="number" min="1" max="65535" required value=")rawliteral";
   html += String(upload.mqttPort);
+  html += R"rawliteral("></label><h2>Network time</h2><label>Primary NTP server<input name="ntp_primary" required maxlength="63" value=")rawliteral";
+  html += htmlEscape(settings_->ntpPrimary());
+  html += R"rawliteral("></label><label>Secondary NTP server<input name="ntp_secondary" required maxlength="63" value=")rawliteral";
+  html += htmlEscape(settings_->ntpSecondary());
+  html += R"rawliteral("></label><label>Timezone rule<input name="tz_rule" required maxlength="63" value=")rawliteral";
+  html += htmlEscape(settings_->timeZoneRule());
+  html += R"rawliteral("></label><p class="hint">POSIX format examples: Perth <code>AWST-8</code>, UTC <code>UTC0</code>, Sydney <code>AEST-10AEDT,M10.1.0,M4.1.0/3</code>.</p><label>Timezone label<input name="tz_label" required maxlength="31" value=")rawliteral";
+  html += htmlEscape(settings_->timeZoneLabel());
   html += R"rawliteral("></label><button type="submit">Save and restart</button></form><p><a href="/">Back to status</a></p></body></html>)rawliteral";
   server_.send(200, "text/html", html);
 }
@@ -137,8 +145,13 @@ void WebUi::handleSettingsSave() {
   const String host = server_.arg("host");
   const long portValue = server_.arg("port").toInt();
   if (portValue < 1 || portValue > 65535 ||
-      !settings_->saveUploadServer(host, static_cast<uint16_t>(portValue),
-                                   server_.hasArg("enabled"))) {
+      !settings_->save(host,
+                       static_cast<uint16_t>(portValue),
+                       server_.hasArg("enabled"),
+                       server_.arg("ntp_primary"),
+                       server_.arg("ntp_secondary"),
+                       server_.arg("tz_rule"),
+                       server_.arg("tz_label"))) {
     server_.send(400, "text/plain", "Invalid settings");
     return;
   }
@@ -244,7 +257,7 @@ String WebUi::liveJson() const {
   json += "\"rtc_synced\":" + String(state_.system.rtcSynced ? "true" : "false") + ",";
   json += "\"rtc_error\":\"" + jsonEscape(state_.system.rtcError) + "\",";
   json += "\"rtc_last_sync\":\"" + jsonEscape(state_.system.rtcLastSync) + "\",";
-  json += "\"time_zone\":\"Australia/Perth\",";
+  json += "\"time_zone\":\"" + jsonEscape(state_.system.timeZone) + "\",";
   json += "\"sd_enabled\":" + String(state_.system.sdEnabled ? "true" : "false") + ",";
   json += "\"sd_ready\":" + String(state_.system.sdReady ? "true" : "false") + ",";
   json += "\"wifi_ready\":" + String(state_.system.wifiReady ? "true" : "false") + ",";
@@ -330,7 +343,7 @@ String WebUi::indexHtml() const {
     async function refreshLive() {
       const response = await fetch('/api/live');
       const data = await response.json();
-      document.getElementById('stamp').textContent = data.timestamp + ' AWST | uptime ' + data.uptime_ms + ' ms';
+      document.getElementById('stamp').textContent = data.timestamp + ' ' + data.system.time_zone + ' | uptime ' + data.uptime_ms + ' ms';
       data.sensors.forEach((sensor) => {
         document.getElementById('sensor-value-' + sensor.id).textContent = sensor.value.toFixed(1) + ' ' + sensor.units;
         document.getElementById('sensor-loop-' + sensor.id).textContent = sensor.loop_mA.toFixed(2) + ' mA';
