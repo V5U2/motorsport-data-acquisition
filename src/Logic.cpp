@@ -68,6 +68,12 @@ float applyLowPassFilter(const float previousValue, const float currentValue, co
   return (clampedAlpha * currentValue) + ((1.0f - clampedAlpha) * previousValue);
 }
 
+bool intervalElapsed(const uint32_t nowMs,
+                     const uint32_t previousMs,
+                     const uint32_t intervalMs) {
+  return static_cast<uint32_t>(nowMs - previousMs) >= intervalMs;
+}
+
 std::string fallbackTimestamp(const uint32_t uptimeMs) {
   return "boot+" + std::to_string(uptimeMs);
 }

@@ -241,7 +241,10 @@ String WebUi::liveJson() const {
   json += "\"display_enabled\":" + String(state_.system.displayEnabled ? "true" : "false") + ",";
   json += "\"rtc_enabled\":" + String(state_.system.rtcEnabled ? "true" : "false") + ",";
   json += "\"rtc_ready\":" + String(state_.system.rtcReady ? "true" : "false") + ",";
+  json += "\"rtc_synced\":" + String(state_.system.rtcSynced ? "true" : "false") + ",";
   json += "\"rtc_error\":\"" + jsonEscape(state_.system.rtcError) + "\",";
+  json += "\"rtc_last_sync\":\"" + jsonEscape(state_.system.rtcLastSync) + "\",";
+  json += "\"time_zone\":\"Australia/Perth\",";
   json += "\"sd_enabled\":" + String(state_.system.sdEnabled ? "true" : "false") + ",";
   json += "\"sd_ready\":" + String(state_.system.sdReady ? "true" : "false") + ",";
   json += "\"wifi_ready\":" + String(state_.system.wifiReady ? "true" : "false") + ",";
@@ -309,6 +312,7 @@ String WebUi::indexHtml() const {
       <div class="label">System</div>
       <div class="status"><span>ADC</span><span id="adcStatus">--</span></div>
       <div class="status"><span>RTC</span><span id="rtcStatus">--</span></div>
+      <div class="status"><span>Last time sync</span><span id="rtcLastSync">--</span></div>
       <div class="status"><span>SD</span><span id="sdStatus">--</span></div>
       <div class="status"><span>Upload</span><span id="uploadStatus">--</span></div>
       <div class="status"><span>Server</span><span id="uploadServer">--</span></div>
@@ -326,14 +330,15 @@ String WebUi::indexHtml() const {
     async function refreshLive() {
       const response = await fetch('/api/live');
       const data = await response.json();
-      document.getElementById('stamp').textContent = data.timestamp + ' | uptime ' + data.uptime_ms + ' ms';
+      document.getElementById('stamp').textContent = data.timestamp + ' AWST | uptime ' + data.uptime_ms + ' ms';
       data.sensors.forEach((sensor) => {
         document.getElementById('sensor-value-' + sensor.id).textContent = sensor.value.toFixed(1) + ' ' + sensor.units;
         document.getElementById('sensor-loop-' + sensor.id).textContent = sensor.loop_mA.toFixed(2) + ' mA';
         document.getElementById('sensor-fault-' + sensor.id).textContent = sensor.fault;
       });
       document.getElementById('adcStatus').textContent = data.system.adc_ready ? 'OK' : 'FAULT';
-      document.getElementById('rtcStatus').textContent = data.system.rtc_enabled ? (data.system.rtc_ready ? 'OK' : 'FAULT') : 'DISABLED';
+      document.getElementById('rtcStatus').textContent = data.system.rtc_enabled ? (data.system.rtc_ready ? (data.system.rtc_synced ? 'NTP SYNCED' : 'HOLDOVER') : 'FAULT') : 'DISABLED';
+      document.getElementById('rtcLastSync').textContent = data.system.rtc_last_sync || '--';
       document.getElementById('sdStatus').textContent = data.system.sd_enabled ? (data.system.sd_ready ? 'OK' : 'FAULT') : 'DISABLED';
       document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? 'MQTT LIVE' : 'WAITING') : 'DISABLED';
       document.getElementById('uploadServer').textContent = data.system.upload_server || 'Not configured';

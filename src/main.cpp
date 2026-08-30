@@ -9,6 +9,7 @@
 #include "CsvLogger.h"
 #include "Dashboard.h"
 #include "LiveUpload.h"
+#include "Logic.h"
 #include "RuntimeSettings.h"
 #include "SensorChannel.h"
 #include "Timekeeper.h"
@@ -34,8 +35,11 @@ RuntimeSettings runtimeSettings;
 
 bool adcReady = false;
 bool rtcReady = false;
+bool rtcNetworkSynced = false;
 bool wifiReady = false;
 bool otaReady = false;
+bool networkTimeConfigured = false;
+String rtcLastSync;
 
 uint32_t lastSampleMs = 0;
 uint32_t lastDisplayMs = 0;
@@ -50,6 +54,10 @@ bool longPressHandled = false;
 constexpr uint32_t kValidNetworkEpoch = 1704067200UL;  // 2024-01-01 UTC
 constexpr int32_t kPerthUtcOffsetSeconds = 8 * 60 * 60;
 constexpr uint32_t kNtpSyncTimeoutMs = 10000;
+constexpr uint32_t kRtcSyncRetryIntervalMs = 60000;
+constexpr uint32_t kRtcResyncIntervalMs = 60UL * 60UL * 1000UL;
+uint32_t lastRtcSyncAttemptMs = 0;
+uint32_t lastRtcSuccessfulSyncMs = 0;
 
 float readVoltage(const uint8_t channel) {
   const int16_t raw = ads.readADC_SingleEnded(channel);
@@ -94,7 +102,9 @@ AppState buildState() {
   state.system.displayEnabled = AppConfig::kFeatures.displayEnabled;
   state.system.rtcEnabled = AppConfig::kFeatures.rtcEnabled;
   state.system.rtcReady = rtcReady;
+  state.system.rtcSynced = rtcNetworkSynced;
   state.system.rtcError = timekeeper.lastError();
+  state.system.rtcLastSync = rtcLastSync;
   state.system.sdEnabled = AppConfig::kFeatures.sdLoggingEnabled;
   state.system.sdReady = csvLogger.isReady() && csvLogger.lastError().isEmpty();
   state.system.wifiReady = wifiReady;
@@ -141,17 +151,25 @@ void beginOta() {
   otaReady = true;
 }
 
-void initialiseRtcFromNetwork() {
-  if (rtcReady || !wifiReady || webUi.modeString() != "STA") {
-    return;
+bool syncRtcFromNetwork(const bool waitForInitialSync) {
+  if (!AppConfig::kFeatures.rtcEnabled || !wifiReady ||
+      webUi.modeString() != "STA") {
+    return false;
   }
 
-  configTime(0, 0, "pool.ntp.org", "time.google.com");
+  if (!networkTimeConfigured) {
+    configTime(0, 0, "pool.ntp.org", "time.google.com");
+    networkTimeConfigured = true;
+  }
+
   const uint32_t startedMs = millis();
+  lastRtcSyncAttemptMs = startedMs;
   time_t now = time(nullptr);
-  while (now < static_cast<time_t>(kValidNetworkEpoch) &&
+  while (waitForInitialSync &&
+         now < static_cast<time_t>(kValidNetworkEpoch) &&
          (millis() - startedMs) < kNtpSyncTimeoutMs) {
     ArduinoOTA.handle();
+    webUi.handleClient();
     delay(100);
     now = time(nullptr);
   }
@@ -159,6 +177,27 @@ void initialiseRtcFromNetwork() {
   if (now >= static_cast<time_t>(kValidNetworkEpoch)) {
     rtcReady = timekeeper.setFromUnixTime(static_cast<uint32_t>(now),
                                           kPerthUtcOffsetSeconds);
+    if (rtcReady) {
+      rtcNetworkSynced = true;
+      lastRtcSuccessfulSyncMs = millis();
+      rtcLastSync = timekeeper.logTimestamp(lastRtcSuccessfulSyncMs) + " AWST";
+      return true;
+    }
+  }
+  return false;
+}
+
+void maintainRtcSync(const uint32_t nowMs) {
+  if (!AppConfig::kFeatures.rtcEnabled || !wifiReady ||
+      webUi.modeString() != "STA") {
+    return;
+  }
+  const uint32_t previousMs =
+      rtcNetworkSynced ? lastRtcSuccessfulSyncMs : lastRtcSyncAttemptMs;
+  const uint32_t intervalMs =
+      rtcNetworkSynced ? kRtcResyncIntervalMs : kRtcSyncRetryIntervalMs;
+  if (Logic::intervalElapsed(nowMs, previousMs, intervalMs)) {
+    syncRtcFromNetwork(false);
   }
 }
 
@@ -222,7 +261,7 @@ void setup() {
 
   if (AppConfig::kFeatures.rtcEnabled) {
     rtcReady = timekeeper.begin(Wire, AppConfig::kRtc);
-    initialiseRtcFromNetwork();
+    syncRtcFromNetwork(true);
   }
 
   if (AppConfig::kFeatures.sdLoggingEnabled) {
@@ -247,6 +286,7 @@ void loop() {
   }
 
   const uint32_t nowMs = millis();
+  maintainRtcSync(nowMs);
 
   if ((nowMs - lastSampleMs) >= AppConfig::kTiming.sampleIntervalMs) {
     sampleSensors();

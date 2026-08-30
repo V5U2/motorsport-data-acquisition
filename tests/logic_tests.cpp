@@ -81,6 +81,15 @@ void testFilter() {
   expectNear(Logic::applyLowPassFilter(10.0f, 20.0f, 2.0f), 20.0f, 0.001f, "alpha clamps high");
 }
 
+void testIntervalTiming() {
+  expectEqual(Logic::intervalElapsed(60000, 0, 60000), 1,
+              "interval is due at boundary");
+  expectEqual(Logic::intervalElapsed(59999, 0, 60000), 0,
+              "interval is not due early");
+  expectEqual(Logic::intervalElapsed(25, 0xFFFFFFF0U, 40), 1,
+              "interval timing survives millis wrap");
+}
+
 void testTimestampFormatting() {
   expectEqual(Logic::fallbackTimestamp(12345), "boot+12345", "fallback timestamp");
   expectEqual(Logic::formatTimestamp(2026, 3, 4, 5, 6, 7), "2026-03-04 05:06:07",
@@ -124,6 +133,7 @@ int main() {
   testFaultThresholds();
   testEngineeringScaling();
   testFilter();
+  testIntervalTiming();
   testTimestampFormatting();
   testFileNameNormalization();
   testUploadIdentifiers();
