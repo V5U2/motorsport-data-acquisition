@@ -58,6 +58,17 @@ constexpr uint32_t kRtcResyncIntervalMs = 60UL * 60UL * 1000UL;
 uint32_t lastRtcSyncAttemptMs = 0;
 uint32_t lastRtcSuccessfulSyncMs = 0;
 
+uint64_t extendedUptimeMs() {
+  static uint32_t previousMs = 0;
+  static uint64_t wrapBaseMs = 0;
+  const uint32_t currentMs = millis();
+  if (currentMs < previousMs) {
+    wrapBaseMs += (1ULL << 32);
+  }
+  previousMs = currentMs;
+  return wrapBaseMs + currentMs;
+}
+
 float readVoltage(const uint8_t channel) {
   const int16_t raw = ads.readADC_SingleEnded(channel);
   return ads.computeVolts(raw);
@@ -95,7 +106,9 @@ AppState buildState() {
   for (size_t index = 0; index < sensorChannels.size(); ++index) {
     state.sensors[index] = sensorChannels[index].snapshot();
   }
-  state.uptimeMs = millis();
+  const uint64_t uptimeMs = extendedUptimeMs();
+  state.uptimeMs = static_cast<uint32_t>(uptimeMs);
+  state.uptime = String(Logic::formatUptime(uptimeMs).c_str());
   state.timestamp = timekeeper.logTimestamp(state.uptimeMs);
   state.system.adcReady = adcReady;
   state.system.displayEnabled = AppConfig::kFeatures.displayEnabled;

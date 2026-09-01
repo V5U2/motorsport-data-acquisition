@@ -55,5 +55,6 @@ struct AppState {
   std::array<SensorSnapshot, AppConfig::kSensorCount> sensors;
   SystemStatus system;
   uint32_t uptimeMs;
+  String uptime;
   String timestamp;
 };

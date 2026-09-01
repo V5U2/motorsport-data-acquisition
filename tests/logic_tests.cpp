@@ -92,6 +92,11 @@ void testIntervalTiming() {
 
 void testTimestampFormatting() {
   expectEqual(Logic::fallbackTimestamp(12345), "boot+12345", "fallback timestamp");
+  expectEqual(Logic::formatUptime(0), "00:00:00:00", "zero uptime");
+  expectEqual(Logic::formatUptime(93784000), "01:02:03:04",
+              "formats uptime as days hours minutes seconds");
+  expectEqual(Logic::formatUptime(1ULL << 32), "49:17:02:47",
+              "formats extended uptime beyond millis wrap");
   expectEqual(Logic::formatTimestamp(2026, 3, 4, 5, 6, 7), "2026-03-04 05:06:07",
               "RTC timestamp formatting");
   expectEqual(Logic::formatDateStamp(2026, 3, 4), "20260304", "date stamp formatting");

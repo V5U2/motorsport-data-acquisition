@@ -234,6 +234,7 @@ String WebUi::liveJson() const {
   String json = "{";
   json += "\"timestamp\":\"" + state_.timestamp + "\",";
   json += "\"uptime_ms\":" + String(state_.uptimeMs) + ",";
+  json += "\"uptime\":\"" + state_.uptime + "\",";
   json += "\"sensors\":[";
   for (size_t index = 0; index < state_.sensors.size(); ++index) {
     const SensorSnapshot &sensor = state_.sensors[index];
@@ -343,7 +344,7 @@ String WebUi::indexHtml() const {
     async function refreshLive() {
       const response = await fetch('/api/live');
       const data = await response.json();
-      document.getElementById('stamp').textContent = data.timestamp + ' ' + data.system.time_zone + ' | uptime ' + data.uptime_ms + ' ms';
+      document.getElementById('stamp').textContent = data.timestamp + ' ' + data.system.time_zone + ' | uptime ' + data.uptime;
       data.sensors.forEach((sensor) => {
         document.getElementById('sensor-value-' + sensor.id).textContent = sensor.value.toFixed(1) + ' ' + sensor.units;
         document.getElementById('sensor-loop-' + sensor.id).textContent = sensor.loop_mA.toFixed(2) + ' mA';

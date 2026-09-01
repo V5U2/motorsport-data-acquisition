@@ -78,6 +78,23 @@ std::string fallbackTimestamp(const uint32_t uptimeMs) {
   return "boot+" + std::to_string(uptimeMs);
 }
 
+std::string formatUptime(const uint64_t uptimeMs) {
+  const uint64_t totalSeconds = uptimeMs / 1000ULL;
+  const uint64_t days = totalSeconds / 86400ULL;
+  const uint64_t hours = (totalSeconds / 3600ULL) % 24ULL;
+  const uint64_t minutes = (totalSeconds / 60ULL) % 60ULL;
+  const uint64_t seconds = totalSeconds % 60ULL;
+  char buffer[32];
+  std::snprintf(buffer,
+                sizeof(buffer),
+                "%02llu:%02llu:%02llu:%02llu",
+                static_cast<unsigned long long>(days),
+                static_cast<unsigned long long>(hours),
+                static_cast<unsigned long long>(minutes),
+                static_cast<unsigned long long>(seconds));
+  return std::string(buffer);
+}
+
 std::string formatTimestamp(const int year,
                             const int month,
                             const int day,

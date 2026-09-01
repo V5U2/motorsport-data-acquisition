@@ -22,6 +22,7 @@ float applyLowPassFilter(float previousValue, float currentValue, float alpha);
 bool intervalElapsed(uint32_t nowMs, uint32_t previousMs, uint32_t intervalMs);
 
 std::string fallbackTimestamp(uint32_t uptimeMs);
+std::string formatUptime(uint64_t uptimeMs);
 std::string formatTimestamp(int year, int month, int day, int hour, int minute, int second);
 std::string formatDateStamp(int year, int month, int day);
 std::string normalizeLogFileName(std::string_view rawName);
