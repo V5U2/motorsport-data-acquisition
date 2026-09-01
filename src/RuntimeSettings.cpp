@@ -12,10 +12,20 @@ bool RuntimeSettings::begin(const AppConfig::UploadConfig &defaults,
   Record record{};
   EEPROM.get(0, record);
   if (!valid(record)) {
+    Version2Record version2{};
     LegacyRecord legacy{};
+    EEPROM.get(0, version2);
     EEPROM.get(0, legacy);
     populateDefaults(record, defaults, defaultUploadEnabled);
-    if (valid(legacy)) {
+    if (valid(version2)) {
+      record.uploadEnabled = version2.uploadEnabled;
+      record.mqttPort = version2.mqttPort;
+      strncpy(record.mqttHost, version2.mqttHost, sizeof(record.mqttHost) - 1);
+      strncpy(record.ntpPrimary, version2.ntpPrimary, sizeof(record.ntpPrimary) - 1);
+      strncpy(record.ntpSecondary, version2.ntpSecondary, sizeof(record.ntpSecondary) - 1);
+      strncpy(record.timeZoneRule, version2.timeZoneRule, sizeof(record.timeZoneRule) - 1);
+      strncpy(record.timeZoneLabel, version2.timeZoneLabel, sizeof(record.timeZoneLabel) - 1);
+    } else if (valid(legacy)) {
       record.uploadEnabled = legacy.uploadEnabled;
       record.mqttPort = legacy.mqttPort;
       strncpy(record.mqttHost, legacy.mqttHost, sizeof(record.mqttHost) - 1);
@@ -35,7 +45,9 @@ bool RuntimeSettings::save(const String &host,
                            const String &ntpPrimary,
                            const String &ntpSecondary,
                            const String &timeZoneRule,
-                           const String &timeZoneLabel) {
+                           const String &timeZoneLabel,
+                           const bool remoteManagementEnabled,
+                           const uint32_t appliedConfigVersion) {
   if (!validText(host, kHostCapacity) || port == 0 ||
       !validText(ntpPrimary, kNtpCapacity) ||
       !validText(ntpSecondary, kNtpCapacity) ||
@@ -49,7 +61,9 @@ bool RuntimeSettings::save(const String &host,
   record.version = kVersion;
   record.size = sizeof(Record);
   record.uploadEnabled = enabled ? 1 : 0;
+  record.remoteManagementEnabled = remoteManagementEnabled ? 1 : 0;
   record.mqttPort = port;
+  record.appliedConfigVersion = appliedConfigVersion;
   host.toCharArray(record.mqttHost, sizeof(record.mqttHost));
   ntpPrimary.toCharArray(record.ntpPrimary, sizeof(record.ntpPrimary));
   ntpSecondary.toCharArray(record.ntpSecondary, sizeof(record.ntpSecondary));
@@ -64,6 +78,19 @@ bool RuntimeSettings::save(const String &host,
 
   apply(record);
   return true;
+}
+
+bool RuntimeSettings::applyRemoteConfig(const RemoteConfig &config) {
+  if (!remoteManagementEnabled_ || config.version <= appliedConfigVersion_) {
+    return false;
+  }
+  const bool uploadEnabled = config.hasUploadEnabled ? config.uploadEnabled : uploadEnabled_;
+  const String primary = config.ntpPrimary.isEmpty() ? String(ntpPrimary_) : config.ntpPrimary;
+  const String secondary = config.ntpSecondary.isEmpty() ? String(ntpSecondary_) : config.ntpSecondary;
+  const String rule = config.timeZoneRule.isEmpty() ? String(timeZoneRule_) : config.timeZoneRule;
+  const String label = config.timeZoneLabel.isEmpty() ? String(timeZoneLabel_) : config.timeZoneLabel;
+  return save(String(mqttHost_), uploadConfig_.mqttPort, uploadEnabled, primary, secondary,
+              rule, label, true, config.version);
 }
 
 const AppConfig::UploadConfig &RuntimeSettings::uploadConfig() const { return uploadConfig_; }
@@ -85,6 +112,10 @@ const char *RuntimeSettings::timeZoneRule() const { return timeZoneRule_; }
 
 const char *RuntimeSettings::timeZoneLabel() const { return timeZoneLabel_; }
 
+bool RuntimeSettings::remoteManagementEnabled() const { return remoteManagementEnabled_; }
+
+uint32_t RuntimeSettings::appliedConfigVersion() const { return appliedConfigVersion_; }
+
 uint32_t RuntimeSettings::checksum(const Record &record) {
   const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&record);
   uint32_t value = 2166136261UL;
@@ -99,6 +130,16 @@ uint32_t RuntimeSettings::checksum(const LegacyRecord &record) {
   const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&record);
   uint32_t value = 2166136261UL;
   for (size_t index = 0; index < offsetof(LegacyRecord, checksum); ++index) {
+    value ^= bytes[index];
+    value *= 16777619UL;
+  }
+  return value;
+}
+
+uint32_t RuntimeSettings::checksum(const Version2Record &record) {
+  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&record);
+  uint32_t value = 2166136261UL;
+  for (size_t index = 0; index < offsetof(Version2Record, checksum); ++index) {
     value ^= bytes[index];
     value *= 16777619UL;
   }
@@ -129,6 +170,19 @@ bool RuntimeSettings::valid(const LegacyRecord &record) {
          record.checksum == checksum(record);
 }
 
+bool RuntimeSettings::valid(const Version2Record &record) {
+  return record.magic == kMagic && record.version == 2 &&
+         record.size == sizeof(Version2Record) && record.mqttPort != 0 &&
+         record.mqttHost[0] != '\0' && record.mqttHost[kHostCapacity - 1] == '\0' &&
+         record.ntpPrimary[0] != '\0' && record.ntpPrimary[kNtpCapacity - 1] == '\0' &&
+         record.ntpSecondary[0] != '\0' && record.ntpSecondary[kNtpCapacity - 1] == '\0' &&
+         record.timeZoneRule[0] != '\0' &&
+         record.timeZoneRule[kTimeZoneRuleCapacity - 1] == '\0' &&
+         record.timeZoneLabel[0] != '\0' &&
+         record.timeZoneLabel[kTimeZoneLabelCapacity - 1] == '\0' &&
+         record.checksum == checksum(record);
+}
+
 bool RuntimeSettings::validText(const String &value, const size_t capacity) {
   if (value.isEmpty() || value.length() >= capacity) {
     return false;
@@ -150,7 +204,9 @@ void RuntimeSettings::populateDefaults(Record &record,
   record.version = kVersion;
   record.size = sizeof(Record);
   record.uploadEnabled = defaultUploadEnabled ? 1 : 0;
+  record.remoteManagementEnabled = 0;
   record.mqttPort = defaults.mqttPort;
+  record.appliedConfigVersion = 0;
   strncpy(record.mqttHost, defaults.mqttHost, sizeof(record.mqttHost) - 1);
   strncpy(record.ntpPrimary, "pool.ntp.org", sizeof(record.ntpPrimary) - 1);
   strncpy(record.ntpSecondary, "time.google.com", sizeof(record.ntpSecondary) - 1);
@@ -173,4 +229,6 @@ void RuntimeSettings::apply(const Record &record) {
   uploadConfig_.mqttHost = mqttHost_;
   uploadConfig_.mqttPort = record.mqttPort;
   uploadEnabled_ = record.uploadEnabled != 0;
+  remoteManagementEnabled_ = record.remoteManagementEnabled != 0;
+  appliedConfigVersion_ = record.appliedConfigVersion;
 }

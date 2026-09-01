@@ -1,5 +1,7 @@
 #include "LiveUpload.h"
 
+#include <ArduinoJson.h>
+
 #if defined(ESP8266)
 #include <ESP8266WiFi.h>
 #else
@@ -14,31 +16,70 @@ namespace {
 constexpr uint16_t kMqttBufferSize = 2048;
 constexpr uint16_t kMqttSocketTimeoutSeconds = 1;
 constexpr uint32_t kNetworkClientTimeoutMs = 500;
+constexpr uint32_t kStatusHeartbeatMs = 30000;
+constexpr size_t kRemoteConfigJsonCapacity = 1024;
+
+bool validRemoteText(const char *value, const size_t maximumLength) {
+  if (value == nullptr) {
+    return true;
+  }
+  const size_t length = strlen(value);
+  if (length == 0 || length > maximumLength) {
+    return false;
+  }
+  for (size_t index = 0; index < length; ++index) {
+    if (static_cast<uint8_t>(value[index]) < 0x20) {
+      return false;
+    }
+  }
+  return true;
+}
 
 }  // namespace
 
 LiveUpload::LiveUpload() : mqttClient_(networkClient_) {}
 
-bool LiveUpload::begin(const AppConfig::UploadConfig &config, const bool enabled) {
+bool LiveUpload::begin(const AppConfig::UploadConfig &config,
+                       const bool enabled,
+                       const bool remoteManagementEnabled,
+                       const uint32_t appliedConfigVersion) {
   config_ = config;
   enabled_ = enabled;
+  remoteManagementEnabled_ = remoteManagementEnabled;
+  appliedConfigVersion_ = appliedConfigVersion;
 
   const std::string normalizedDevice = Logic::normalizeTopicSegment(config.deviceId);
   deviceId_ = normalizedDevice.empty() ? "mda-logger" : String(normalizedDevice.c_str());
 
 #if defined(ESP8266)
   const uint32_t bootCounter = ESP.random();
+  const uint32_t pairingEntropy = ESP.random();
   const uint32_t chipSuffix = ESP.getChipId() & 0xFFFFUL;
 #else
   const uint32_t bootCounter = esp_random();
+  const uint32_t pairingEntropy = esp_random();
   const uint32_t chipSuffix = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFULL);
 #endif
   sessionId_ = String(Logic::formatSessionId(deviceId_.c_str(), bootCounter).c_str());
   clientId_ = deviceId_ + "-" + String(chipSuffix, HEX);
+  constexpr char kPairingAlphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  uint64_t pairingBits = (static_cast<uint64_t>(bootCounter) << 32) | pairingEntropy;
+  char pairingBuffer[10]{};
+  for (size_t index = 0; index < 8; ++index) {
+    const size_t outputIndex = index < 4 ? index : index + 1;
+    pairingBuffer[outputIndex] = kPairingAlphabet[pairingBits & 0x1FULL];
+    pairingBits >>= 5;
+  }
+  pairingBuffer[4] = '-';
+  pairingCode_ = pairingBuffer;
 
   mqttClient_.setServer(config_.mqttHost, config_.mqttPort);
   mqttClient_.setBufferSize(kMqttBufferSize);
   mqttClient_.setSocketTimeout(kMqttSocketTimeoutSeconds);
+  mqttClient_.setCallback(
+      [this](char *topic, uint8_t *payload, unsigned int length) {
+        handleMqttMessage(topic, payload, length);
+      });
   networkClient_.setTimeout(kNetworkClientTimeoutMs);
 
   if (!enabled_) {
@@ -74,6 +115,10 @@ void LiveUpload::loop() {
   }
 
   mqttClient_.loop();
+  const uint32_t nowMs = millis();
+  if (mqttClient_.connected() && (nowMs - lastStatusPublishMs_) >= kStatusHeartbeatMs) {
+    publishStatus(true);
+  }
 }
 
 bool LiveUpload::publishIfDue(const AppState &state) {
@@ -126,6 +171,28 @@ String LiveUpload::lastError() const { return lastError_; }
 
 uint32_t LiveUpload::lastSequence() const { return lastSequence_; }
 
+String LiveUpload::pairingCode() const {
+  return remoteManagementEnabled_ ? pairingCode_ : "";
+}
+
+bool LiveUpload::consumeRemoteConfig(RemoteConfig &config) {
+  if (!hasPendingRemoteConfig_) {
+    return false;
+  }
+  config = pendingRemoteConfig_;
+  hasPendingRemoteConfig_ = false;
+  return true;
+}
+
+void LiveUpload::acknowledgeRemoteConfig(const uint32_t version) {
+  appliedConfigVersion_ = version;
+  managementStatus_ = "applied";
+  managementError_ = "";
+  if (mqttClient_.connected()) {
+    publishStatus(true);
+  }
+}
+
 bool LiveUpload::reconnect(const uint32_t nowMs) {
   if (strlen(config_.mqttHost) == 0) {
     lastError_ = "MQTT host not configured";
@@ -164,6 +231,11 @@ bool LiveUpload::reconnect(const uint32_t nowMs) {
   if (!publishStatus(true)) {
     return false;
   }
+  if (remoteManagementEnabled_ && !mqttClient_.subscribe(desiredConfigTopic().c_str(), 1)) {
+    lastError_ = "MQTT desired config subscribe failed";
+    mqttClient_.disconnect();
+    return false;
+  }
 
   lastError_ = "";
   return true;
@@ -183,6 +255,76 @@ bool LiveUpload::publishStatus(const bool connected) {
     lastError_ = "MQTT status publish failed";
     return false;
   }
+  lastStatusPublishMs_ = millis();
+  return true;
+}
+
+void LiveUpload::handleMqttMessage(char *topic, uint8_t *payload, unsigned int length) {
+  if (!remoteManagementEnabled_ || String(topic) != desiredConfigTopic()) {
+    return;
+  }
+  RemoteConfig candidate{};
+  if (!parseRemoteConfig(payload, length, candidate)) {
+    managementStatus_ = "rejected";
+    managementError_ = "Invalid desired configuration";
+    return;
+  }
+  if (candidate.version <= appliedConfigVersion_) {
+    return;
+  }
+  pendingRemoteConfig_ = candidate;
+  hasPendingRemoteConfig_ = true;
+  managementStatus_ = "pending";
+  managementError_ = "";
+}
+
+bool LiveUpload::parseRemoteConfig(const uint8_t *payload,
+                                   const unsigned int length,
+                                   RemoteConfig &config) {
+  if (length == 0 || length > kRemoteConfigJsonCapacity) {
+    return false;
+  }
+  StaticJsonDocument<kRemoteConfigJsonCapacity> document;
+  if (deserializeJson(document, payload, length) != DeserializationError::Ok) {
+    return false;
+  }
+  if (document["schema_version"].as<int>() != 1 ||
+      String(document["device_id"].as<const char *>()) != deviceId_) {
+    return false;
+  }
+  const uint32_t version = document["config_version"].as<uint32_t>();
+  JsonObject settings = document["settings"].as<JsonObject>();
+  if (version == 0 || settings.isNull()) {
+    return false;
+  }
+  for (JsonPair item : settings) {
+    const String key = item.key().c_str();
+    if (key != "upload_enabled" && key != "ntp_primary" && key != "ntp_secondary" &&
+        key != "tz_rule" && key != "tz_label") {
+      return false;
+    }
+  }
+  config = {};
+  config.version = version;
+  if (settings.containsKey("upload_enabled")) {
+    if (!settings["upload_enabled"].is<bool>()) {
+      return false;
+    }
+    config.hasUploadEnabled = true;
+    config.uploadEnabled = settings["upload_enabled"].as<bool>();
+  }
+  const char *primary = settings["ntp_primary"] | nullptr;
+  const char *secondary = settings["ntp_secondary"] | nullptr;
+  const char *rule = settings["tz_rule"] | nullptr;
+  const char *label = settings["tz_label"] | nullptr;
+  if (!validRemoteText(primary, 63) || !validRemoteText(secondary, 63) ||
+      !validRemoteText(rule, 63) || !validRemoteText(label, 31)) {
+    return false;
+  }
+  config.ntpPrimary = primary == nullptr ? "" : primary;
+  config.ntpSecondary = secondary == nullptr ? "" : secondary;
+  config.timeZoneRule = rule == nullptr ? "" : rule;
+  config.timeZoneLabel = label == nullptr ? "" : label;
   return true;
 }
 
@@ -205,6 +347,17 @@ String LiveUpload::statusTopic() const {
   return String(Logic::formatUploadTopic(config_.topicPrefix, deviceId_.c_str(), "status").c_str());
 }
 
+String LiveUpload::desiredConfigTopic() const {
+  String prefix = config_.topicPrefix;
+  while (prefix.startsWith("/")) {
+    prefix.remove(0, 1);
+  }
+  while (prefix.endsWith("/")) {
+    prefix.remove(prefix.length() - 1);
+  }
+  return prefix + "/" + deviceId_ + "/config/desired";
+}
+
 String LiveUpload::buildStatusJson(const bool connected) const {
   String json = "{";
   json += "\"schema_version\":" + String(Logic::kLivePayloadSchemaVersion) + ",";
@@ -212,6 +365,16 @@ String LiveUpload::buildStatusJson(const bool connected) const {
   json += "\"session_id\":\"" + jsonEscape(sessionId_) + "\",";
   json += "\"protocol\":\"mqtt\",";
   json += "\"connected\":" + String(connected ? "true" : "false");
+  if (remoteManagementEnabled_) {
+    json += ",\"management\":{";
+    json += "\"enabled\":true,";
+    json += "\"pairing_code\":\"" + jsonEscape(pairingCode_) + "\",";
+    json += "\"config_version\":" + String(appliedConfigVersion_) + ",";
+    json += "\"status\":\"" + jsonEscape(managementStatus_) + "\",";
+    json += "\"error\":\"" + jsonEscape(managementError_) + "\",";
+    json += "\"firmware_version\":\"" + jsonEscape(APEXI_FIRMWARE_VERSION) + "\"";
+    json += "}";
+  }
   json += "}";
   return json;
 }

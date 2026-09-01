@@ -26,6 +26,9 @@
 #ifndef APEXI_MQTT_PASSWORD
 #define APEXI_MQTT_PASSWORD ""
 #endif
+#ifndef APEXI_FIRMWARE_VERSION
+#define APEXI_FIRMWARE_VERSION "dev"
+#endif
 
 namespace AppConfig {
 
@@ -202,7 +205,7 @@ inline constexpr WifiConfig kWifi{
 inline constexpr FeatureConfig kFeatures{
     false,
     true,
-    false,
+    true,
     false,
     true,
 };

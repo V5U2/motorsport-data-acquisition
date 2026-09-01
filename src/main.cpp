@@ -252,7 +252,11 @@ void setup() {
 
   runtimeSettings.begin(AppConfig::kLiveUpload, AppConfig::kFeatures.liveUploadEnabled);
   wifiReady = webUi.begin(AppConfig::kWifi, csvLogger, runtimeSettings);
-  liveUpload.begin(runtimeSettings.uploadConfig(), runtimeSettings.liveUploadEnabled());
+  liveUpload.begin(runtimeSettings.uploadConfig(),
+                   runtimeSettings.liveUploadEnabled(),
+                   runtimeSettings.remoteManagementEnabled(),
+                   runtimeSettings.appliedConfigVersion());
+  webUi.setManagementPairingCode(liveUpload.pairingCode());
   Serial.print("wifiReady=");
   Serial.println(wifiReady ? "1" : "0");
   Serial.print("wifiMode=");
@@ -296,6 +300,17 @@ void loop() {
   handleButton();
   webUi.handleClient();
   liveUpload.loop();
+  RemoteConfig remoteConfig{};
+  if (liveUpload.consumeRemoteConfig(remoteConfig)) {
+    if (runtimeSettings.applyRemoteConfig(remoteConfig)) {
+      liveUpload.acknowledgeRemoteConfig(remoteConfig.version);
+      Serial.print("remoteConfigApplied=");
+      Serial.println(remoteConfig.version);
+      Serial.flush();
+      delay(250);
+      ESP.restart();
+    }
+  }
   if (otaReady) {
     ArduinoOTA.handle();
   }

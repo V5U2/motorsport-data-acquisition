@@ -7,7 +7,7 @@
 - Power: DFRobot DFR1015 buck converter for the regulated rail
 - UI button: DFRobot DFR0029-W digital push button
 - RTC: RV-3028-C7 on the Unexpected Maker RTC Logger Shield, sharing the primary I2C bus with the ADS1115
-- Optional storage: 3.3 V-compatible SPI microSD module
+- Storage: microSD slot on the Unexpected Maker RTC Logger Shield, using FAT32 media
 - Optional display: 480x320 SPI TFT using ST7796S
 
 ## Recommended wiring
@@ -104,7 +104,7 @@ Update the values in [`include/PinDefinitions.h`](../include/PinDefinitions.h) i
 | --- | --- | --- | --- |
 | 1 | [3.5 inch 480x320 SPI TFT with ST7796S controller](https://core-electronics.com.au/catalog/product/view/sku/WS-15811) | Local dashboard display | Optional; if fitted, leave `displayEnabled` on in [`include/AppConfig.h`](../include/AppConfig.h) |
 | 1 | Unexpected Maker RTC Logger Shield with RV-3028-C7 | Timestamps without network time | Enabled; shield GPIO 8/SDA connects to D2 and GPIO 9/SCL connects to D1 |
-| 1 | 3.3 V-compatible SPI microSD module | Durable local CSV storage | Optional; uses D5/D6/D7 plus D0 chip select |
+| 1 | FAT32 microSD card in the Unexpected Maker RTC Logger Shield | Durable local CSV storage | Enabled; shield pins 36/37/35/34 map to D5/D6/D7/D0 respectively |
 | 1 | [24 V boost regulator for loop-powered sensors (Pololu U3V9F24, item 5588)](https://core-electronics.com.au/catalog/product/view/sku/POLOLU-5588) | Generates a dedicated 24 V sensor supply from the 12 V system rail | Optional; use only when a transmitter needs 24 V loop power and place it after the [Pololu 5380 reverse-voltage protector](https://core-electronics.com.au/pololu-reverse-voltage-protector-4-60v-10a.html) |
 
 Recommended example module:
@@ -118,6 +118,8 @@ Optional hardware toggles:
 The default is station mode using credentials from the ignored `include/AppSecrets.h`. The ESP8266 performs a normal all-channel scan rather than pinning a BSSID or channel. At every networked boot, station-mode firmware obtains NTP time and writes configured local time into the RV-3028, even when its retained calendar is already valid. It refreshes the RTC hourly while online and uses the hardware clock as holdover while offline. The authenticated `/settings` page configures both NTP servers, a POSIX timezone rule, and the short label shown beside device time; defaults are `pool.ntp.org`, `time.google.com`, `AWST-8`, and `AWST`. The web UI reports NTP synchronization state and the last successful RTC update. If association fails within 30 seconds, it exposes the open fallback SoftAP `MDA-LOGGER` on 2.4 GHz channel 6 at `http://192.168.44.1`. Leave `apPassword` empty for an open recovery AP or set an 8+ character WPA2 password. Change `AppConfig::kWifi.apAddress` if that subnet is already in use.
 
 For station Wi-Fi or live MQTT commissioning, copy [`include/AppSecrets.example.h`](../include/AppSecrets.example.h) to the git-ignored `include/AppSecrets.h`. Keep Wi-Fi and broker passwords in that local file. An authenticated production broker requires `APEXI_MQTT_USERNAME` to equal the normalized `AppConfig::kLiveUpload.deviceId`; firmware startup rejects a mismatched identity before connecting. Provision the matching password in the infrastructure vault.
+
+Remote management is optional and starts disabled. To pair a logger, first enable both **Live upload** and **Allow remote management** on the digest-authenticated local `/settings` page. After restart, reopen `/settings`, copy the displayed logger ID and eight-character pairing code into **User profile → Telemetry loggers** in the app, then explicitly enable remote configuration for that claimed logger. The device checks desired configuration identity and monotonic version before persisting it. If recovery is needed, disable remote management locally; no app command may change the broker host, MQTT credential, OTA password, sensor calibration, or remote-management opt-in.
 
 For the managed development environment, use broker hostname `apexlabs-dev`, port `1883`, and topic prefix `motorsport/logger` from an allowed LAN or VPN. Set `AppConfig::kWifi.mode` to `WifiMode::Station` and `AppConfig::kFeatures.liveUploadEnabled` to `true` before building the track firmware.
 

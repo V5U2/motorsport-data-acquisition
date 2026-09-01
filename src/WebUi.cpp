@@ -90,6 +90,10 @@ String WebUi::modeString() const { return mode_; }
 
 String WebUi::ipAddress() const { return ipAddress_; }
 
+void WebUi::setManagementPairingCode(const String &pairingCode) {
+  managementPairingCode_ = pairingCode;
+}
+
 void WebUi::registerRoutes() {
   server_.on("/", HTTP_GET, [this]() { handleIndex(); });
   server_.on("/api/live", HTTP_GET, [this]() { handleLiveJson(); });
@@ -121,7 +125,17 @@ void WebUi::handleSettings() {
   if (settings_->liveUploadEnabled()) {
     html += " checked";
   }
-  html += R"rawliteral(> Enable live upload</label><label>Server host<input name="host" required maxlength="63" value=")rawliteral";
+  html += R"rawliteral(> Enable live upload</label><label><input type="checkbox" name="remote_management" value="1")rawliteral";
+  if (settings_->remoteManagementEnabled()) {
+    html += " checked";
+  }
+  html += R"rawliteral(> Allow remote management</label><p class="hint">Optional. Pair and configure this logger from the ApexiLabs app. Live upload must remain enabled; disable this locally at any time to restore outbound-only operation.</p>)rawliteral";
+  if (settings_->remoteManagementEnabled() && !managementPairingCode_.isEmpty()) {
+    html += "<p>App pairing code: <strong>" + htmlEscape(managementPairingCode_) +
+            "</strong></p><p class=\"hint\">Enter this code with logger ID <code>" +
+            htmlEscape(settings_->uploadConfig().deviceId) + "</code>. The code changes after restart.</p>";
+  }
+  html += R"rawliteral(<label>Server host<input name="host" required maxlength="63" value=")rawliteral";
   html += htmlEscape(upload.mqttHost);
   html += R"rawliteral("></label><label>MQTT port<input name="port" type="number" min="1" max="65535" required value=")rawliteral";
   html += String(upload.mqttPort);
@@ -144,14 +158,22 @@ void WebUi::handleSettingsSave() {
 
   const String host = server_.arg("host");
   const long portValue = server_.arg("port").toInt();
+  const bool uploadEnabled = server_.hasArg("enabled");
+  const bool remoteManagementEnabled = server_.hasArg("remote_management");
+  if (remoteManagementEnabled && !uploadEnabled) {
+    server_.send(400, "text/plain", "Remote management requires live upload");
+    return;
+  }
   if (portValue < 1 || portValue > 65535 ||
       !settings_->save(host,
                        static_cast<uint16_t>(portValue),
-                       server_.hasArg("enabled"),
+                       uploadEnabled,
                        server_.arg("ntp_primary"),
                        server_.arg("ntp_secondary"),
                        server_.arg("tz_rule"),
-                       server_.arg("tz_label"))) {
+                       server_.arg("tz_label"),
+                       remoteManagementEnabled,
+                       settings_->appliedConfigVersion())) {
     server_.send(400, "text/plain", "Invalid settings");
     return;
   }
