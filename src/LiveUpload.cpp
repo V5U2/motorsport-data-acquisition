@@ -99,14 +99,6 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config,
   clientId_ = deviceId_ + "-" + String(chipSuffix, HEX);
   rotatePairingCode(millis());
 
-  mqttClient_.setServer(config_.mqttHost, config_.mqttPort);
-  mqttClient_.setBufferSize(kMqttBufferSize);
-  mqttClient_.setSocketTimeout(kMqttSocketTimeoutSeconds);
-  mqttClient_.setCallback(
-      [this](char *topic, uint8_t *payload, unsigned int length) {
-        handleMqttMessage(topic, payload, length);
-      });
-  networkClient_.setTimeout(kNetworkClientTimeoutMs);
   if (!enabled_) {
     lastError_ = "Live upload disabled";
     return false;
@@ -137,6 +129,15 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config,
     lastError_ = "";
     return true;
   }
+
+  mqttClient_.setServer(config_.mqttHost, config_.mqttPort);
+  mqttClient_.setBufferSize(kMqttBufferSize);
+  mqttClient_.setSocketTimeout(kMqttSocketTimeoutSeconds);
+  mqttClient_.setCallback(
+      [this](char *topic, uint8_t *payload, unsigned int length) {
+        handleMqttMessage(topic, payload, length);
+      });
+  networkClient_.setTimeout(kNetworkClientTimeoutMs);
 
   if (!Logic::mqttIdentityMatches(config_.deviceId, config_.mqttUsername)) {
     lastError_ = "MQTT username must match normalized device ID " + deviceId_;
@@ -493,12 +494,29 @@ bool LiveUpload::postHttps(const char *kind, const String &payload, String *resp
   http.addHeader("Authorization", "Bearer " + String(config_.appDeviceToken));
   http.addHeader("CF-Access-Client-Id", config_.cloudflareAccessClientId);
   http.addHeader("CF-Access-Client-Secret", config_.cloudflareAccessClientSecret);
+#if defined(ESP8266)
+  const uint32_t heapBeforePost = ESP.getFreeHeap();
+  const uint32_t maxBlockBeforePost = ESP.getMaxFreeBlockSize();
+  const uint8_t fragmentationBeforePost = ESP.getHeapFragmentation();
+#endif
   const int status = http.POST(payload);
   const String body = status > 0 ? http.getString() : "";
   http.end();
   if (status < 200 || status >= 300) {
-    lastError_ = status < 0 ? "HTTPS transport error " + String(status)
-                            : "HTTPS upload rejected " + String(status);
+    if (status < 0) {
+      lastError_ = "HTTPS " + HTTPClient::errorToString(status);
+#if defined(ESP8266)
+      char tlsError[96] = {};
+      const int tlsErrorCode = httpsClient_.getLastSSLError(tlsError, sizeof(tlsError));
+      if (tlsErrorCode != 0) {
+        lastError_ += " TLS " + String(tlsErrorCode) + " " + String(tlsError);
+      }
+      lastError_ += " heap=" + String(heapBeforePost) + " max=" + String(maxBlockBeforePost) +
+                    " frag=" + String(fragmentationBeforePost) + "%";
+#endif
+    } else {
+      lastError_ = "HTTPS upload rejected " + String(status);
+    }
     httpsConnected_ = false;
     return false;
   }
