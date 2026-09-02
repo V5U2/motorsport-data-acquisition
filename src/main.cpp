@@ -110,6 +110,7 @@ AppState buildState() {
   state.uptimeMs = static_cast<uint32_t>(uptimeMs);
   state.uptime = String(Logic::formatUptime(uptimeMs).c_str());
   state.timestamp = timekeeper.logTimestamp(state.uptimeMs);
+  state.transportTimestamp = timekeeper.transportTimestamp(state.uptimeMs);
   state.system.adcReady = adcReady;
   state.system.displayEnabled = AppConfig::kFeatures.displayEnabled;
   state.system.rtcEnabled = AppConfig::kFeatures.rtcEnabled;
@@ -171,9 +172,15 @@ bool syncRtcFromNetwork(const bool waitForInitialSync) {
   }
 
   if (!networkTimeConfigured) {
+#if defined(ESP8266)
     configTime(runtimeSettings.timeZoneRule(),
                runtimeSettings.ntpPrimary(),
                runtimeSettings.ntpSecondary());
+#else
+    configTzTime(runtimeSettings.timeZoneRule(),
+                 runtimeSettings.ntpPrimary(),
+                 runtimeSettings.ntpSecondary());
+#endif
     networkTimeConfigured = true;
   }
 
@@ -227,10 +234,13 @@ void setup() {
   Serial.println("MDA logger boot");
   Serial.flush();
 
-  // The NodeMCU built-in LED is active low. A steady light confirms that the
-  // MCU has power and has reached firmware setup rather than remaining in reset.
+  // A steady light confirms that the MCU has reached firmware setup.
   pinMode(AppConfig::kPins.statusLed, OUTPUT);
+#if defined(ESP8266)
   digitalWrite(AppConfig::kPins.statusLed, LOW);
+#else
+  digitalWrite(AppConfig::kPins.statusLed, HIGH);
+#endif
 
   pinMode(AppConfig::kPins.buttonPin, INPUT_PULLUP);
   if (AppConfig::kFeatures.displayEnabled) {

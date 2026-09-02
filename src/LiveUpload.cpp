@@ -595,7 +595,7 @@ String LiveUpload::buildSnapshotJson(const AppState &state, const uint32_t seque
   json += "\"device_id\":\"" + jsonEscape(deviceId_) + "\",";
   json += "\"session_id\":\"" + jsonEscape(sessionId_) + "\",";
   json += "\"sequence\":" + String(sequence) + ",";
-  json += "\"timestamp\":\"" + jsonEscape(state.timestamp) + "\",";
+  json += "\"timestamp\":\"" + jsonEscape(state.transportTimestamp) + "\",";
   json += "\"uptime_ms\":" + String(state.uptimeMs) + ",";
   json += "\"sensors\":[";
   for (size_t index = 0; index < state.sensors.size(); ++index) {

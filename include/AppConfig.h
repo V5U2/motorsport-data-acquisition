@@ -230,7 +230,7 @@ inline constexpr FeatureConfig kFeatures{
     false,
     true,
     true,
-    false,
+    true,
     true,
 };
 

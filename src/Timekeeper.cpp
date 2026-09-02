@@ -17,6 +17,7 @@ void Timekeeper::disable() {
   wire_ = nullptr;
   address_ = 0;
   ready_ = false;
+  networkReady_ = false;
   lastError_ = "RTC disabled";
 }
 
@@ -121,6 +122,7 @@ bool Timekeeper::setFromUnixTime(const uint32_t utcEpoch) {
       static_cast<uint8_t>(localTime.tm_min),
       static_cast<uint8_t>(localTime.tm_sec),
   };
+  networkReady_ = true;
 
   bool written = false;
   switch (backend_) {
@@ -141,12 +143,8 @@ bool Timekeeper::setFromUnixTime(const uint32_t utcEpoch) {
 }
 
 String Timekeeper::logTimestamp(const uint32_t uptimeMs) {
-  if (!ready_) {
-    return String(Logic::fallbackTimestamp(uptimeMs).c_str());
-  }
-
   CalendarTime now{};
-  if (!readCurrentTime(now)) {
+  if ((!ready_ || !readCurrentTime(now)) && !readNetworkTime(now)) {
     return String(Logic::fallbackTimestamp(uptimeMs).c_str());
   }
 
@@ -159,13 +157,30 @@ String Timekeeper::logTimestamp(const uint32_t uptimeMs) {
                     .c_str());
 }
 
-String Timekeeper::dateStamp() {
-  if (!ready_) {
-    return "boot";
+String Timekeeper::transportTimestamp(const uint32_t uptimeMs) const {
+  if (!networkReady_) {
+    return String(Logic::fallbackTimestamp(uptimeMs).c_str());
   }
+  const time_t epoch = ::time(nullptr);
+  struct tm utcTime {};
+  if (gmtime_r(&epoch, &utcTime) == nullptr || utcTime.tm_year < 124) {
+    return String(Logic::fallbackTimestamp(uptimeMs).c_str());
+  }
+  String timestamp = String(Logic::formatTimestamp(static_cast<uint16_t>(utcTime.tm_year + 1900),
+                                                    static_cast<uint8_t>(utcTime.tm_mon + 1),
+                                                    static_cast<uint8_t>(utcTime.tm_mday),
+                                                    static_cast<uint8_t>(utcTime.tm_hour),
+                                                    static_cast<uint8_t>(utcTime.tm_min),
+                                                    static_cast<uint8_t>(utcTime.tm_sec))
+                                .c_str());
+  timestamp.setCharAt(10, 'T');
+  timestamp += 'Z';
+  return timestamp;
+}
 
+String Timekeeper::dateStamp() {
   CalendarTime now{};
-  if (!readCurrentTime(now)) {
+  if ((!ready_ || !readCurrentTime(now)) && !readNetworkTime(now)) {
     return "boot";
   }
 
@@ -173,6 +188,24 @@ String Timekeeper::dateStamp() {
 }
 
 String Timekeeper::lastError() const { return lastError_; }
+
+bool Timekeeper::readNetworkTime(CalendarTime &time) const {
+  if (!networkReady_) {
+    return false;
+  }
+  const time_t epoch = ::time(nullptr);
+  struct tm localTime {};
+  if (localtime_r(&epoch, &localTime) == nullptr || localTime.tm_year < 124) {
+    return false;
+  }
+  time.year = static_cast<uint16_t>(localTime.tm_year + 1900);
+  time.month = static_cast<uint8_t>(localTime.tm_mon + 1);
+  time.day = static_cast<uint8_t>(localTime.tm_mday);
+  time.hour = static_cast<uint8_t>(localTime.tm_hour);
+  time.minute = static_cast<uint8_t>(localTime.tm_min);
+  time.second = static_cast<uint8_t>(localTime.tm_sec);
+  return true;
+}
 
 bool Timekeeper::readCurrentTime(CalendarTime &time) {
   switch (backend_) {

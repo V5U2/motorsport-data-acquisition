@@ -1,9 +1,10 @@
 #pragma once
 
 // Central pin definitions shared by the firmware and the TFT_eSPI setup.
-// These defaults target a NodeMCU 1.0 / ESP-12E DevKit V2. GPIO numbers are
-// used in code; the matching NodeMCU D-labels are included for wiring.
 
+#if defined(ESP8266)
+// NodeMCU 1.0 / ESP-12E DevKit V2. GPIO numbers are used in code; the
+// matching NodeMCU D-labels are included for wiring.
 #define PIN_I2C_SDA 4   // D2
 #define PIN_I2C_SCL 5   // D1
 
@@ -20,3 +21,24 @@
 
 #define PIN_UI_BUTTON 3  // RX; firmware only transmits serial diagnostics
 #define PIN_STATUS_LED 2 // D4; NodeMCU built-in LED, active low
+#elif defined(ESP32)
+// Generic classic ESP32 DevKit / ESP32-WROOM-32. These are raw GPIO labels.
+#define PIN_I2C_SDA 21
+#define PIN_I2C_SCL 22
+
+#define MDA_PIN_SPI_MOSI 23
+#define MDA_PIN_SPI_MISO 19
+#define MDA_PIN_SPI_SCLK 18
+
+#define PIN_TFT_CS 27
+#define PIN_TFT_DC 26
+#define PIN_TFT_RST 25
+#define PIN_TFT_BL -1
+
+#define PIN_SD_CS 5
+
+#define PIN_UI_BUTTON 32
+#define PIN_STATUS_LED 2
+#else
+#error "Unsupported MCU: add its pin map to PinDefinitions.h"
+#endif

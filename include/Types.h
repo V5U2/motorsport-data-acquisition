@@ -57,4 +57,5 @@ struct AppState {
   uint32_t uptimeMs;
   String uptime;
   String timestamp;
+  String transportTimestamp;
 };

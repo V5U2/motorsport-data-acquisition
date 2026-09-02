@@ -1,7 +1,7 @@
 # Hardware Setup
 
 ## Core modules
-- MCU: NodeMCU 1.0 / ESP-12E DevKit V2 (`nodemcuv2`) as the supported firmware target
+- MCU: NodeMCU 1.0 / ESP-12E DevKit V2 (`nodemcuv2`) or classic ESP32 DevKit / ESP32-WROOM-32 (`esp32dev`)
 - ADC: ADS1115 on I2C, using the Adafruit ADA1085 board
 - Sensor interface: 2x DFRobot SEN0262 current-to-voltage modules
 - Power: DFRobot DFR1015 buck converter for the regulated rail
@@ -85,6 +85,26 @@ For the current two-sensor build, both receiver signals terminate at the ADS1115
 
 Update the values in [`include/PinDefinitions.h`](../include/PinDefinitions.h) if the actual wiring differs.
 
+## Classic ESP32 DevKit pin map
+
+Use the raw GPIO numbers printed on a classic ESP32 DevKit/WROOM-class board.
+
+| Function | ESP32 GPIO | Default use |
+| --- | --- | --- |
+| I2C SDA | GPIO 21 | ADS1115 SDA + RTC SDA |
+| I2C SCL | GPIO 22 | ADS1115 SCL + RTC SCL |
+| SPI MOSI | GPIO 23 | Optional TFT + microSD MOSI |
+| SPI MISO | GPIO 19 | Optional TFT + microSD MISO |
+| SPI SCLK | GPIO 18 | Optional TFT + microSD SCLK |
+| microSD CS | GPIO 5 | RTC Logger Shield microSD CS |
+| TFT CS | GPIO 27 | Optional TFT chip select |
+| TFT DC | GPIO 26 | Optional TFT data/command |
+| TFT RST | GPIO 25 | Optional TFT reset |
+| UI button | GPIO 32 | Optional active-low button |
+| Built-in status LED | GPIO 2 | Common DevKit LED assignment; active high |
+
+The sensor receiver boards still connect to ADS1115 A0 and A1 rather than to an ESP32 ADC pin. Power the ADS1115 from the ESP32 `3V3` pin so its I2C pull-ups remain at 3.3 V. Some DevKit variants omit the GPIO 2 LED; that does not affect logging.
+
 ## Core BOM
 
 | Qty | Item | Purpose | Notes |
@@ -115,7 +135,7 @@ Optional hardware toggles:
 - Set `AppConfig::kFeatures.rtcEnabled` to `false` when no RTC hardware is fitted.
 - Set `AppConfig::kFeatures.sdLoggingEnabled` to `false` when no SD hardware is fitted.
 
-The default is station mode using credentials from the ignored `include/AppSecrets.h`. The ESP8266 performs a normal all-channel scan rather than pinning a BSSID or channel. At every networked boot, station-mode firmware obtains NTP time and writes configured local time into the RV-3028, even when its retained calendar is already valid. It refreshes the RTC hourly while online and uses the hardware clock as holdover while offline. The authenticated `/settings` page configures both NTP servers, a POSIX timezone rule, and the short label shown beside device time; defaults are `pool.ntp.org`, `time.google.com`, `AWST-8`, and `AWST`. The web UI reports NTP synchronization state and the last successful RTC update. If association fails within 30 seconds, it exposes the open fallback SoftAP `MDA-LOGGER` on 2.4 GHz channel 6 at `http://192.168.44.1`. Leave `apPassword` empty for an open recovery AP or set an 8+ character WPA2 password. Change `AppConfig::kWifi.apAddress` if that subnet is already in use.
+The default is station mode using credentials from the ignored `include/AppSecrets.h`. The firmware performs a normal all-channel scan rather than pinning a BSSID or channel. At every networked boot, station-mode firmware obtains NTP time and writes configured local time into the RV-3028, even when its retained calendar is already valid. It refreshes the RTC hourly while online and uses the hardware clock as holdover while offline. When an RTC is absent or cannot be written, valid NTP/system time still supplies timestamps while the UI correctly reports `rtc_ready=false`. UI and CSV timestamps use configured local wall time; live transport payloads use timezone-qualified UTC RFC 3339 timestamps. The authenticated `/settings` page configures both NTP servers, a POSIX timezone rule, and the short label shown beside device time; defaults are `pool.ntp.org`, `time.google.com`, `AWST-8`, and `AWST`. The web UI reports NTP synchronization state and the last successful RTC update. If association fails within 30 seconds, it exposes the open fallback SoftAP `MDA-LOGGER` on 2.4 GHz channel 6 at `http://192.168.44.1`. Leave `apPassword` empty for an open recovery AP or set an 8+ character WPA2 password. Change `AppConfig::kWifi.apAddress` if that subnet is already in use.
 
 For station Wi-Fi or live-upload commissioning, copy [`include/AppSecrets.example.h`](../include/AppSecrets.example.h) to the git-ignored `include/AppSecrets.h`. Keep Wi-Fi and transport credentials in that local file. An authenticated production broker requires `APEXI_MQTT_USERNAME` to equal the normalized `AppConfig::kLiveUpload.deviceId`. When direct MQTT is unavailable, enable HTTPS and provision a dedicated Cloudflare Access service token plus a scoped app device token. The Access application must use a **Service Auth** policy for that token; the device sends both Access headers and its app bearer on every request.
 
