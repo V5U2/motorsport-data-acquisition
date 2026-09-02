@@ -90,8 +90,10 @@ String WebUi::modeString() const { return mode_; }
 
 String WebUi::ipAddress() const { return ipAddress_; }
 
-void WebUi::setManagementPairingCode(const String &pairingCode) {
+void WebUi::setManagementPairingCode(const String &pairingCode,
+                                     const uint32_t expiresInSeconds) {
   managementPairingCode_ = pairingCode;
+  managementPairingExpiresInSeconds_ = expiresInSeconds;
 }
 
 void WebUi::registerRoutes() {
@@ -131,9 +133,12 @@ void WebUi::handleSettings() {
   }
   html += R"rawliteral(> Allow remote management</label><p class="hint">Optional. Pair and configure this logger from the ApexiLabs app. Live upload must remain enabled; disable this locally at any time to restore outbound-only operation.</p>)rawliteral";
   if (settings_->remoteManagementEnabled() && !managementPairingCode_.isEmpty()) {
-    html += "<p>App pairing code: <strong>" + htmlEscape(managementPairingCode_) +
-            "</strong></p><p class=\"hint\">Enter this code with logger ID <code>" +
-            htmlEscape(settings_->uploadConfig().deviceId) + "</code>. The code changes after restart.</p>";
+    html += "<p>Temporary pairing code: <strong class=\"pairing-code\">" +
+            htmlEscape(managementPairingCode_) + "</strong></p>";
+    html += "<p class=\"hint\">Enter only this code in the ApexiLabs app. The app identifies this logger automatically. "
+            "This code refreshes every 10 minutes; next refresh in <span id=\"pairingCountdown\" data-seconds=\"" +
+            String(managementPairingExpiresInSeconds_) + "\">--:--</span>.</p>";
+    html += R"rawliteral(<script>(()=>{const el=document.getElementById('pairingCountdown');let remaining=Number(el.dataset.seconds||0);const render=()=>{const minutes=Math.floor(remaining/60);const seconds=remaining%60;el.textContent=String(minutes).padStart(2,'0')+':'+String(seconds).padStart(2,'0');};render();setInterval(()=>{remaining=Math.max(0,remaining-1);render();if(remaining===0)window.location.reload();},1000);})();</script>)rawliteral";
   }
   html += R"rawliteral(<label>Server host<input name="host" required maxlength="63" value=")rawliteral";
   html += htmlEscape(upload.mqttHost);

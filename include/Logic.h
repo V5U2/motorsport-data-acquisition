@@ -30,5 +30,6 @@ std::string normalizeTopicSegment(std::string_view rawSegment);
 bool mqttIdentityMatches(std::string_view deviceId, std::string_view username);
 std::string formatUploadTopic(std::string_view prefix, std::string_view deviceId, std::string_view leaf);
 std::string formatSessionId(std::string_view deviceId, uint32_t bootCounter);
+std::string formatPairingCode(uint64_t entropy);
 
 }  // namespace Logic

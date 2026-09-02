@@ -17,6 +17,7 @@ constexpr uint16_t kMqttBufferSize = 2048;
 constexpr uint16_t kMqttSocketTimeoutSeconds = 1;
 constexpr uint32_t kNetworkClientTimeoutMs = 500;
 constexpr uint32_t kStatusHeartbeatMs = 30000;
+constexpr uint32_t kPairingCodeRefreshMs = 10UL * 60UL * 1000UL;
 constexpr size_t kRemoteConfigJsonCapacity = 1024;
 
 bool validRemoteText(const char *value, const size_t maximumLength) {
@@ -53,25 +54,14 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config,
 
 #if defined(ESP8266)
   const uint32_t bootCounter = ESP.random();
-  const uint32_t pairingEntropy = ESP.random();
   const uint32_t chipSuffix = ESP.getChipId() & 0xFFFFUL;
 #else
   const uint32_t bootCounter = esp_random();
-  const uint32_t pairingEntropy = esp_random();
   const uint32_t chipSuffix = static_cast<uint32_t>(ESP.getEfuseMac() & 0xFFFFULL);
 #endif
   sessionId_ = String(Logic::formatSessionId(deviceId_.c_str(), bootCounter).c_str());
   clientId_ = deviceId_ + "-" + String(chipSuffix, HEX);
-  constexpr char kPairingAlphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
-  uint64_t pairingBits = (static_cast<uint64_t>(bootCounter) << 32) | pairingEntropy;
-  char pairingBuffer[10]{};
-  for (size_t index = 0; index < 8; ++index) {
-    const size_t outputIndex = index < 4 ? index : index + 1;
-    pairingBuffer[outputIndex] = kPairingAlphabet[pairingBits & 0x1FULL];
-    pairingBits >>= 5;
-  }
-  pairingBuffer[4] = '-';
-  pairingCode_ = pairingBuffer;
+  rotatePairingCode(millis());
 
   mqttClient_.setServer(config_.mqttHost, config_.mqttPort);
   mqttClient_.setBufferSize(kMqttBufferSize);
@@ -106,6 +96,15 @@ void LiveUpload::loop() {
     return;
   }
 
+  const uint32_t nowMs = millis();
+  if (remoteManagementEnabled_ &&
+      Logic::intervalElapsed(nowMs, pairingCodeGeneratedMs_, kPairingCodeRefreshMs)) {
+    rotatePairingCode(nowMs);
+    if (mqttClient_.connected()) {
+      publishStatus(true);
+    }
+  }
+
   if (WiFi.status() != WL_CONNECTED) {
     publishOfflineStatusAndDisconnect();
     if (lastError_.isEmpty()) {
@@ -115,7 +114,6 @@ void LiveUpload::loop() {
   }
 
   mqttClient_.loop();
-  const uint32_t nowMs = millis();
   if (mqttClient_.connected() && (nowMs - lastStatusPublishMs_) >= kStatusHeartbeatMs) {
     publishStatus(true);
   }
@@ -173,6 +171,27 @@ uint32_t LiveUpload::lastSequence() const { return lastSequence_; }
 
 String LiveUpload::pairingCode() const {
   return remoteManagementEnabled_ ? pairingCode_ : "";
+}
+
+uint32_t LiveUpload::pairingCodeExpiresInSeconds() const {
+  if (!remoteManagementEnabled_ || pairingCode_.isEmpty()) {
+    return 0;
+  }
+  const uint32_t elapsedMs = static_cast<uint32_t>(millis() - pairingCodeGeneratedMs_);
+  if (elapsedMs >= kPairingCodeRefreshMs) {
+    return 0;
+  }
+  return (kPairingCodeRefreshMs - elapsedMs + 999UL) / 1000UL;
+}
+
+void LiveUpload::rotatePairingCode(const uint32_t nowMs) {
+#if defined(ESP8266)
+  const uint64_t entropy = (static_cast<uint64_t>(ESP.random()) << 32) | ESP.random();
+#else
+  const uint64_t entropy = (static_cast<uint64_t>(esp_random()) << 32) | esp_random();
+#endif
+  pairingCode_ = Logic::formatPairingCode(entropy).c_str();
+  pairingCodeGeneratedMs_ = nowMs;
 }
 
 bool LiveUpload::consumeRemoteConfig(RemoteConfig &config) {
@@ -369,6 +388,7 @@ String LiveUpload::buildStatusJson(const bool connected) const {
     json += ",\"management\":{";
     json += "\"enabled\":true,";
     json += "\"pairing_code\":\"" + jsonEscape(pairingCode_) + "\",";
+    json += "\"pairing_expires_in_s\":" + String(pairingCodeExpiresInSeconds()) + ",";
     json += "\"config_version\":" + String(appliedConfigVersion_) + ",";
     json += "\"status\":\"" + jsonEscape(managementStatus_) + "\",";
     json += "\"error\":\"" + jsonEscape(managementError_) + "\",";

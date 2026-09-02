@@ -129,6 +129,11 @@ void testUploadIdentifiers() {
   expectEqual(Logic::formatUploadTopic("/motorsport/live/", "Car 01", "Telemetry"),
               "motorsport/live/car-01/telemetry", "formats MQTT topic");
   expectEqual(Logic::formatSessionId("Car 01", 42), "car-01-boot-42", "formats session id");
+  expectEqual(Logic::formatPairingCode(0), "AAAA-AAAA", "formats zero pairing entropy");
+  const std::string pairingCode = Logic::formatPairingCode(0x123456789aULL);
+  expectEqual(static_cast<int>(pairingCode.size()), 9, "formats pairing code with separator");
+  expectEqual(static_cast<int>(pairingCode[4]), static_cast<int>('-'),
+              "places pairing code separator");
 }
 
 }  // namespace

@@ -208,4 +208,16 @@ std::string formatSessionId(std::string_view deviceId, const uint32_t bootCounte
   return prefix + "-boot-" + std::to_string(bootCounter);
 }
 
+std::string formatPairingCode(uint64_t entropy) {
+  constexpr char kPairingAlphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  char pairingBuffer[10]{};
+  for (size_t index = 0; index < 8; ++index) {
+    const size_t outputIndex = index < 4 ? index : index + 1;
+    pairingBuffer[outputIndex] = kPairingAlphabet[entropy & 0x1FULL];
+    entropy >>= 5;
+  }
+  pairingBuffer[4] = '-';
+  return std::string(pairingBuffer);
+}
+
 }  // namespace Logic

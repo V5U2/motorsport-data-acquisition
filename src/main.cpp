@@ -256,7 +256,8 @@ void setup() {
                    runtimeSettings.liveUploadEnabled(),
                    runtimeSettings.remoteManagementEnabled(),
                    runtimeSettings.appliedConfigVersion());
-  webUi.setManagementPairingCode(liveUpload.pairingCode());
+  webUi.setManagementPairingCode(liveUpload.pairingCode(),
+                                 liveUpload.pairingCodeExpiresInSeconds());
   Serial.print("wifiReady=");
   Serial.println(wifiReady ? "1" : "0");
   Serial.print("wifiMode=");
@@ -300,6 +301,8 @@ void loop() {
   handleButton();
   webUi.handleClient();
   liveUpload.loop();
+  webUi.setManagementPairingCode(liveUpload.pairingCode(),
+                                 liveUpload.pairingCodeExpiresInSeconds());
   RemoteConfig remoteConfig{};
   if (liveUpload.consumeRemoteConfig(remoteConfig)) {
     if (runtimeSettings.applyRemoteConfig(remoteConfig)) {

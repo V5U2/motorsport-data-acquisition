@@ -27,6 +27,7 @@ class LiveUpload {
   String lastError() const;
   uint32_t lastSequence() const;
   String pairingCode() const;
+  uint32_t pairingCodeExpiresInSeconds() const;
   bool consumeRemoteConfig(RemoteConfig &config);
   void acknowledgeRemoteConfig(uint32_t version);
 
@@ -37,6 +38,7 @@ class LiveUpload {
   bool publishSnapshot(const AppState &state);
   void handleMqttMessage(char *topic, uint8_t *payload, unsigned int length);
   bool parseRemoteConfig(const uint8_t *payload, unsigned int length, RemoteConfig &config);
+  void rotatePairingCode(uint32_t nowMs);
   String liveTopic() const;
   String statusTopic() const;
   String desiredConfigTopic() const;
@@ -59,6 +61,7 @@ class LiveUpload {
   String clientId_;
   String lastError_;
   String pairingCode_;
+  uint32_t pairingCodeGeneratedMs_ = 0;
   String managementStatus_ = "ready";
   String managementError_;
   RemoteConfig pendingRemoteConfig_{};

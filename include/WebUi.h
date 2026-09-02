@@ -23,7 +23,7 @@ class WebUi {
   bool isReady() const;
   String modeString() const;
   String ipAddress() const;
-  void setManagementPairingCode(const String &pairingCode);
+  void setManagementPairingCode(const String &pairingCode, uint32_t expiresInSeconds);
 
  private:
   void registerRoutes();
@@ -48,6 +48,7 @@ class WebUi {
   String mode_;
   String ipAddress_;
   String managementPairingCode_;
+  uint32_t managementPairingExpiresInSeconds_ = 0;
   bool restartPending_ = false;
   uint32_t restartRequestedMs_ = 0;
 };
