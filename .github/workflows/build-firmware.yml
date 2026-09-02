@@ -35,7 +35,7 @@ jobs:
             ${{ runner.os }}-platformio-
 
       - name: Install PlatformIO Core
-        run: pip install platformio
+        run: pip install platformio intelhex
 
       - name: Run full repo verification
         run: ./scripts/verify-repo.sh --full
