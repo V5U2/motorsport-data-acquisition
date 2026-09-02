@@ -12,12 +12,26 @@ bool RuntimeSettings::begin(const AppConfig::UploadConfig &defaults,
   Record record{};
   EEPROM.get(0, record);
   if (!valid(record)) {
+    Version3Record version3{};
     Version2Record version2{};
     LegacyRecord legacy{};
     EEPROM.get(0, version2);
+    EEPROM.get(0, version3);
     EEPROM.get(0, legacy);
     populateDefaults(record, defaults, defaultUploadEnabled);
-    if (valid(version2)) {
+    if (valid(version3)) {
+      record.uploadEnabled = version3.uploadEnabled;
+      record.remoteManagementEnabled = version3.remoteManagementEnabled;
+      record.appliedConfigVersion = version3.appliedConfigVersion;
+      strncpy(record.ntpPrimary, version3.ntpPrimary, sizeof(record.ntpPrimary) - 1);
+      strncpy(record.ntpSecondary, version3.ntpSecondary, sizeof(record.ntpSecondary) - 1);
+      strncpy(record.timeZoneRule, version3.timeZoneRule, sizeof(record.timeZoneRule) - 1);
+      strncpy(record.timeZoneLabel, version3.timeZoneLabel, sizeof(record.timeZoneLabel) - 1);
+      if (defaults.protocol == AppConfig::UploadConfig::Protocol::Mqtt) {
+        record.mqttPort = version3.mqttPort;
+        strncpy(record.mqttHost, version3.mqttHost, sizeof(record.mqttHost) - 1);
+      }
+    } else if (valid(version2)) {
       record.uploadEnabled = version2.uploadEnabled;
       record.mqttPort = version2.mqttPort;
       strncpy(record.mqttHost, version2.mqttHost, sizeof(record.mqttHost) - 1);
@@ -62,6 +76,7 @@ bool RuntimeSettings::save(const String &host,
   record.size = sizeof(Record);
   record.uploadEnabled = enabled ? 1 : 0;
   record.remoteManagementEnabled = remoteManagementEnabled ? 1 : 0;
+  record.uploadProtocol = static_cast<uint8_t>(defaults_.protocol);
   record.mqttPort = port;
   record.appliedConfigVersion = appliedConfigVersion;
   host.toCharArray(record.mqttHost, sizeof(record.mqttHost));
@@ -101,7 +116,11 @@ String RuntimeSettings::uploadServerLabel() const {
   if (strlen(mqttHost_) == 0) {
     return "Not configured";
   }
-  return String(mqttHost_) + ":" + String(uploadConfig_.mqttPort);
+  String label = String(mqttHost_) + ":" + String(uploadConfig_.mqttPort);
+  if (uploadConfig_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    label += uploadConfig_.httpsPath;
+  }
+  return label;
 }
 
 const char *RuntimeSettings::ntpPrimary() const { return ntpPrimary_; }
@@ -146,15 +165,39 @@ uint32_t RuntimeSettings::checksum(const Version2Record &record) {
   return value;
 }
 
+uint32_t RuntimeSettings::checksum(const Version3Record &record) {
+  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&record);
+  uint32_t value = 2166136261UL;
+  for (size_t index = 0; index < offsetof(Version3Record, checksum); ++index) {
+    value ^= bytes[index];
+    value *= 16777619UL;
+  }
+  return value;
+}
+
 bool RuntimeSettings::valid(const Record &record) {
   return record.magic == kMagic && record.version == kVersion &&
          record.size == sizeof(Record) && record.mqttPort != 0 &&
+         record.uploadProtocol <= static_cast<uint8_t>(AppConfig::UploadConfig::Protocol::Https) &&
          record.mqttHost[0] != '\0' &&
          record.mqttHost[kHostCapacity - 1] == '\0' &&
          record.ntpPrimary[0] != '\0' &&
          record.ntpPrimary[kNtpCapacity - 1] == '\0' &&
          record.ntpSecondary[0] != '\0' &&
          record.ntpSecondary[kNtpCapacity - 1] == '\0' &&
+         record.timeZoneRule[0] != '\0' &&
+         record.timeZoneRule[kTimeZoneRuleCapacity - 1] == '\0' &&
+         record.timeZoneLabel[0] != '\0' &&
+         record.timeZoneLabel[kTimeZoneLabelCapacity - 1] == '\0' &&
+         record.checksum == checksum(record);
+}
+
+bool RuntimeSettings::valid(const Version3Record &record) {
+  return record.magic == kMagic && record.version == 3 &&
+         record.size == sizeof(Version3Record) && record.mqttPort != 0 &&
+         record.mqttHost[0] != '\0' && record.mqttHost[kHostCapacity - 1] == '\0' &&
+         record.ntpPrimary[0] != '\0' && record.ntpPrimary[kNtpCapacity - 1] == '\0' &&
+         record.ntpSecondary[0] != '\0' && record.ntpSecondary[kNtpCapacity - 1] == '\0' &&
          record.timeZoneRule[0] != '\0' &&
          record.timeZoneRule[kTimeZoneRuleCapacity - 1] == '\0' &&
          record.timeZoneLabel[0] != '\0' &&
@@ -205,6 +248,7 @@ void RuntimeSettings::populateDefaults(Record &record,
   record.size = sizeof(Record);
   record.uploadEnabled = defaultUploadEnabled ? 1 : 0;
   record.remoteManagementEnabled = 0;
+  record.uploadProtocol = static_cast<uint8_t>(defaults.protocol);
   record.mqttPort = defaults.mqttPort;
   record.appliedConfigVersion = 0;
   strncpy(record.mqttHost, defaults.mqttHost, sizeof(record.mqttHost) - 1);

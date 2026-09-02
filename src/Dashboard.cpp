@@ -162,7 +162,9 @@ void Dashboard::drawDiagnosticsScreen(const AppState &state) {
                  state.system.sdEnabled ? (state.system.sdReady ? TFT_GREEN : TFT_RED) : TFT_LIGHTGREY);
   drawStatusLine(20, 156, "Upload",
                  state.system.uploadEnabled
-                     ? (state.system.uploadConnected ? "MQTT LIVE" : state.system.lastUploadError)
+                     ? (state.system.uploadConnected
+                            ? state.system.uploadProtocol + " LIVE"
+                            : state.system.lastUploadError)
                      : "DISABLED",
                  state.system.uploadEnabled
                      ? (state.system.uploadConnected ? TFT_GREEN : TFT_ORANGE)

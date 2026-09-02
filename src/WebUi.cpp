@@ -123,7 +123,13 @@ void WebUi::handleSettings() {
   }
 
   const AppConfig::UploadConfig &upload = settings_->uploadConfig();
-  String html = R"rawliteral(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Logger Settings</title><style>body{font-family:system-ui;max-width:38rem;margin:2rem auto;padding:0 1rem;background:#09131f;color:#ecf2f8}label{display:block;margin:1rem 0}.hint{color:#95a8ba}input{box-sizing:border-box;width:100%;padding:.7rem;margin-top:.3rem}input[type=checkbox]{width:auto}button{padding:.8rem 1.2rem}a{color:#6dd6ff}h2{margin-top:2rem}</style></head><body><h1>Device settings</h1><form method="post" action="/settings"><h2>Upstream server</h2><p class="hint">MQTT credentials remain in the local secrets header and are never returned by this page.</p><label><input type="checkbox" name="enabled" value="1")rawliteral";
+  const bool httpsUpload = upload.protocol == AppConfig::UploadConfig::Protocol::Https;
+  String html = R"rawliteral(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Logger Settings</title><style>body{font-family:system-ui;max-width:38rem;margin:2rem auto;padding:0 1rem;background:#09131f;color:#ecf2f8}label{display:block;margin:1rem 0}.hint{color:#95a8ba}input{box-sizing:border-box;width:100%;padding:.7rem;margin-top:.3rem}input[type=checkbox]{width:auto}button{padding:.8rem 1.2rem}a{color:#6dd6ff}h2{margin-top:2rem}</style></head><body><h1>Device settings</h1><form method="post" action="/settings"><h2>Upstream server</h2>)rawliteral";
+  html += httpsUpload
+              ? R"rawliteral(<p class="hint">HTTPS through Cloudflare Access. Access and app credentials remain compiled in the local secrets header and are never returned by this page.</p>)rawliteral"
+              : R"rawliteral(<p class="hint">MQTT credentials remain in the local secrets header and are never returned by this page.</p>)rawliteral";
+  html += "<p>Protocol: <strong>" + String(httpsUpload ? "HTTPS" : "MQTT") + "</strong></p>";
+  html += R"rawliteral(<label><input type="checkbox" name="enabled" value="1")rawliteral";
   if (settings_->liveUploadEnabled()) {
     html += " checked";
   }
@@ -142,7 +148,9 @@ void WebUi::handleSettings() {
   }
   html += R"rawliteral(<label>Server host<input name="host" required maxlength="63" value=")rawliteral";
   html += htmlEscape(upload.mqttHost);
-  html += R"rawliteral("></label><label>MQTT port<input name="port" type="number" min="1" max="65535" required value=")rawliteral";
+  html += R"rawliteral("></label><label>)rawliteral";
+  html += httpsUpload ? "HTTPS port" : "MQTT port";
+  html += R"rawliteral(<input name="port" type="number" min="1" max="65535" required value=")rawliteral";
   html += String(upload.mqttPort);
   html += R"rawliteral("></label><h2>Network time</h2><label>Primary NTP server<input name="ntp_primary" required maxlength="63" value=")rawliteral";
   html += htmlEscape(settings_->ntpPrimary());
@@ -381,7 +389,7 @@ String WebUi::indexHtml() const {
       document.getElementById('rtcStatus').textContent = data.system.rtc_enabled ? (data.system.rtc_ready ? (data.system.rtc_synced ? 'NTP SYNCED' : 'HOLDOVER') : 'FAULT') : 'DISABLED';
       document.getElementById('rtcLastSync').textContent = data.system.rtc_last_sync || '--';
       document.getElementById('sdStatus').textContent = data.system.sd_enabled ? (data.system.sd_ready ? 'OK' : 'FAULT') : 'DISABLED';
-      document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? 'MQTT LIVE' : 'WAITING') : 'DISABLED';
+      document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? data.system.upload_protocol.toUpperCase() + ' LIVE' : 'WAITING') : 'DISABLED';
       document.getElementById('uploadServer').textContent = data.system.upload_server || 'Not configured';
       document.getElementById('otaStatus').textContent = data.system.ota_enabled ? (data.system.ota_ready ? 'READY' : 'LOCKED') : 'DISABLED';
       document.getElementById('wifiStatus').textContent = data.system.wifi_mode + ' ' + data.system.ip_address;

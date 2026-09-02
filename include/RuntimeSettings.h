@@ -31,7 +31,7 @@ class RuntimeSettings {
 
  private:
   static constexpr uint32_t kMagic = 0x4D444131UL;
-  static constexpr uint16_t kVersion = 3;
+  static constexpr uint16_t kVersion = 4;
   static constexpr size_t kHostCapacity = 64;
   static constexpr size_t kNtpCapacity = 64;
   static constexpr size_t kTimeZoneRuleCapacity = 64;
@@ -69,6 +69,8 @@ class RuntimeSettings {
     uint16_t size;
     uint8_t uploadEnabled;
     uint8_t remoteManagementEnabled;
+    uint8_t uploadProtocol;
+    uint8_t reserved;
     uint16_t mqttPort;
     uint32_t appliedConfigVersion;
     char mqttHost[kHostCapacity];
@@ -82,9 +84,26 @@ class RuntimeSettings {
   static uint32_t checksum(const Record &record);
   static uint32_t checksum(const LegacyRecord &record);
   static uint32_t checksum(const Version2Record &record);
+  struct Version3Record {
+    uint32_t magic;
+    uint16_t version;
+    uint16_t size;
+    uint8_t uploadEnabled;
+    uint8_t remoteManagementEnabled;
+    uint16_t mqttPort;
+    uint32_t appliedConfigVersion;
+    char mqttHost[kHostCapacity];
+    char ntpPrimary[kNtpCapacity];
+    char ntpSecondary[kNtpCapacity];
+    char timeZoneRule[kTimeZoneRuleCapacity];
+    char timeZoneLabel[kTimeZoneLabelCapacity];
+    uint32_t checksum;
+  };
+  static uint32_t checksum(const Version3Record &record);
   static bool valid(const Record &record);
   static bool valid(const LegacyRecord &record);
   static bool valid(const Version2Record &record);
+  static bool valid(const Version3Record &record);
   static bool validText(const String &value, size_t capacity);
   void populateDefaults(Record &record,
                         const AppConfig::UploadConfig &defaults,

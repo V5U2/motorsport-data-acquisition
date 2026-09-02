@@ -7,7 +7,7 @@ ESP8266 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger
 - Displays live gauges and diagnostics on a 480x320 SPI TFT
 - Logs CSV data to microSD with RTC timestamps when RTC hardware is fitted
 - Serves a lightweight Wi-Fi dashboard and CSV download endpoints
-- Publishes live telemetry over MQTT when station Wi-Fi and broker settings are configured
+- Publishes live telemetry over MQTT or authenticated HTTPS when station Wi-Fi and upstream settings are configured
 - Lights the NodeMCU built-in LED steadily once firmware setup begins
 - Keeps pin mapping, sensor calibration, and refresh rates in one config file
 - Synchronises the RV-3028 from NTP at every networked boot and hourly thereafter, while retaining RTC holdover when offline
@@ -37,7 +37,7 @@ Primary source files:
 ## Build and flash
 1. Install PlatformIO Core or use the PlatformIO VS Code extension.
 2. Wire the NodeMCU using the D-label/GPIO table in [`docs/hardware-setup.md`](docs/hardware-setup.md), then review [`include/PinDefinitions.h`](include/PinDefinitions.h).
-3. Review sensor ranges, timing values, live upload settings, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h). Copy `include/AppSecrets.example.h` to the ignored `include/AppSecrets.h` and set Wi-Fi/MQTT credentials there.
+3. Review sensor ranges, timing values, live upload settings, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h). Copy `include/AppSecrets.example.h` to the ignored `include/AppSecrets.h` and set Wi-Fi plus MQTT or HTTPS credentials there.
 4. Run [`scripts/verify-repo.sh`](scripts/verify-repo.sh) `--fast` for host-side verification and contract checks, and `--full` when the local PlatformIO toolchain is available.
 5. Build and upload with `pio run -t upload --upload-port /dev/cu.usbserial-10`, replacing the port when needed.
 6. Open the serial monitor at 115200 baud with `pio device monitor`. If a CH340-based board stays in reset, open the port with DTR and RTS inactive or press the board's `RST` button once.
@@ -56,11 +56,11 @@ An IP address can be supplied instead if `.local` discovery is unavailable. Do n
 
 ## Live streaming
 
-The firmware now includes a live telemetry publisher for near-real-time upload. The current implementation uses MQTT for the live path and is disabled by default. Enable it in [`include/AppConfig.h`](include/AppConfig.h), switch Wi-Fi to station mode, and configure the broker and credentials in an ignored `include/AppSecrets.h` created from [`include/AppSecrets.example.h`](include/AppSecrets.example.h).
+The firmware includes a live telemetry publisher for near-real-time upload. MQTT remains the normal LAN transport. Set `APEXI_HTTPS_UPLOAD_ENABLED=1` to use the Access-protected HTTPS compatibility transport when the broker is not directly reachable. Configure the Cloudflare Access service-token pair and the scoped app device token only in the ignored `include/AppSecrets.h` created from [`include/AppSecrets.example.h`](include/AppSecrets.example.h). HTTPS validates the public certificate chain against ISRG Root X1; it never disables TLS verification.
 
-The local dashboard shows the active upstream server and MQTT connection state. Open `/settings` to change the MQTT host, port, live-upload enable flag, primary and secondary NTP servers, POSIX timezone rule, displayed timezone label, and the optional remote-management flag. The page uses HTTP Digest authentication with username `admin` and the device's OTA password. These non-secret settings are stored in a versioned, checksummed flash-backed EEPROM record and survive power loss. MQTT credentials remain compiled from the ignored secrets header and are not exposed in the UI or API. Saving settings restarts the logger so the new endpoint and clock configuration are applied cleanly.
+The local dashboard shows the active upstream protocol, server, and connection state. Open `/settings` to change the server host, port, live-upload enable flag, primary and secondary NTP servers, POSIX timezone rule, displayed timezone label, and the optional remote-management flag. The page uses HTTP Digest authentication with username `admin` and the device's OTA password. These non-secret settings are stored in a versioned, checksummed flash-backed EEPROM record and survive power loss. Transport credentials remain compiled from the ignored secrets header and are not exposed in the UI or API. Saving settings restarts the logger so the new endpoint and clock configuration are applied cleanly.
 
-Remote management is disabled by default. Enabling it locally requires live upload and displays a temporary pairing code with a refresh countdown on the authenticated settings page. The logger replaces that proof every ten minutes and immediately reports the replacement through its retained status heartbeat. Enter only the code in the app's shared device-pairing field; the app identifies the logger automatically. After the logger is claimed, it subscribes only to `<topicPrefix>/<deviceId>/config/desired`. Desired documents use schema version 1, must match the authenticated device identity, carry a monotonically increasing configuration version, and may change only live-upload enablement and NTP/timezone values. MQTT host and credentials are deliberately excluded so a remote command cannot redirect or strand the logger. Applied versions are persisted before restart and reported in the retained status heartbeat; disabling remote management locally restores outbound-only MQTT behavior.
+Remote management is disabled by default. Enabling it locally requires live upload and displays a temporary pairing code with a refresh countdown on the authenticated settings page. The logger replaces that proof every ten minutes and immediately reports the replacement through its status heartbeat. Enter only the code in the app's shared device-pairing field; the app identifies the logger automatically. MQTT receives desired configuration from the device-scoped topic; HTTPS receives it in the authenticated status response. Desired documents use schema version 1, must match the authenticated device identity, carry a monotonically increasing configuration version, and may change only live-upload enablement and NTP/timezone values. Upstream host and credentials are deliberately excluded so a remote command cannot redirect or strand the logger.
 
 The default clock configuration uses `pool.ntp.org`, `time.google.com`, POSIX timezone rule `AWST-8`, and display label `AWST`. The dashboard reports whether the RTC has been synchronised from NTP during the current boot, plus the last successful synchronization time. A valid RTC remains the offline holdover source between network synchronizations. POSIX offsets have reversed signs: for example, Perth is `AWST-8`, UTC is `UTC0`, and Sydney with daylight saving is `AEST-10AEDT,M10.1.0,M4.1.0/3`.
 
@@ -83,14 +83,14 @@ There is no separate start-event command in the firmware. When `kFeatures.liveUp
 
 Before using the logger on track:
 
-1. Confirm the local UI reports station Wi-Fi connected and `MQTT LIVE`.
+1. Confirm the local UI reports station Wi-Fi connected and either `MQTT LIVE` or `HTTPS LIVE`.
 2. Check `/api/live` under `system` for `upload_enabled: true`, `upload_connected: true`, the expected `upload_session_id`, an increasing `upload_sequence`, and an empty `last_upload_error`.
 3. Confirm the corresponding session appears in the telemetry app's **Ungrouped Sessions**, then attach it to the prepared event.
 
 Powering down, losing Wi-Fi, or losing MQTT marks the stream offline through retained status or the MQTT last will. The telemetry app owns durable session finalization; the device does not finalize server-side data. Follow the telemetry app [Live Event Operations runbook](https://github.com/V5U2/motorsport-telemetry-app/blob/main/docs/live-events.md) for the complete race-day procedure.
 
 Current limits:
-- This repository currently implements the MQTT live stream only.
+- MQTT and Access-authenticated HTTPS emit the same versioned live/status payloads.
 - HTTP backlog upload and store-and-forward replay are not implemented yet.
 - For motorsport use with spotty connectivity, the intended next step is an HTTP batch uploader that drains unsent SD log segments after connectivity returns.
 

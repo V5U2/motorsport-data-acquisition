@@ -3,8 +3,10 @@
 #include <ArduinoJson.h>
 
 #if defined(ESP8266)
+#include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
 #else
+#include <HTTPClient.h>
 #include <WiFi.h>
 #include <esp_system.h>
 #endif
@@ -19,6 +21,40 @@ constexpr uint32_t kNetworkClientTimeoutMs = 500;
 constexpr uint32_t kStatusHeartbeatMs = 30000;
 constexpr uint32_t kPairingCodeRefreshMs = 10UL * 60UL * 1000UL;
 constexpr size_t kRemoteConfigJsonCapacity = 1024;
+constexpr size_t kHttpsResponseJsonCapacity = 1536;
+constexpr uint32_t kHttpsTimeoutMs = 4000;
+
+const char kIsrgRootX1[] PROGMEM = R"CERT(-----BEGIN CERTIFICATE-----
+MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
+TzELMAkGA1UEBhMCVVMxKTAnBgNVBAoTIEludGVybmV0IFNlY3VyaXR5IFJlc2Vh
+cmNoIEdyb3VwMRUwEwYDVQQDEwxJU1JHIFJvb3QgWDEwHhcNMTUwNjA0MTEwNDM4
+WhcNMzUwNjA0MTEwNDM4WjBPMQswCQYDVQQGEwJVUzEpMCcGA1UEChMgSW50ZXJu
+ZXQgU2VjdXJpdHkgUmVzZWFyY2ggR3JvdXAxFTATBgNVBAMTDElTUkcgUm9vdCBY
+MTCCAiIwDQYJKoZIhvcNAQEBBQADggIPADCCAgoCggIBAK3oJHP0FDfzm54rVygc
+h77ct984kIxuPOZXoHj3dcKi/vVqbvYATyjb3miGbESTtrFj/RQSa78f0uoxmyF+
+0TM8ukj13Xnfs7j/EvEhmkvBioZxaUpmZmyPfjxwv60pIgbz5MDmgK7iS4+3mX6U
+A5/TR5d8mUgjU+g4rk8Kb4Mu0UlXjIB0ttov0DiNewNwIRt18jA8+o+u3dpjq+sW
+T8KOEUt+zwvo/7V3LvSye0rgTBIlDHCNAymg4VMk7BPZ7hm/ELNKjD+Jo2FR3qyH
+B5T0Y3HsLuJvW5iB4YlcNHlsdu87kGJ55tukmi8mxdAQ4Q7e2RCOFvu396j3x+UC
+B5iPNgiV5+I3lg02dZ77DnKxHZu8A/lJBdiB3QW0KtZB6awBdpUKD9jf1b0SHzUv
+KBds0pjBqAlkd25HN7rOrFleaJ1/ctaJxQZBKT5ZPt0m9STJEadao0xAH0ahmbWn
+OlFuhjuefXKnEgV4We0+UXgVCwOPjdAvBbI+e0ocS3MFEvzG6uBQE3xDk3SzynTn
+jh8BCNAw1FtxNrQHusEwMFxIt4I7mKZ9YIqioymCzLq9gwQbooMDQaHWBfEbwrbw
+qHyGO0aoSCqI3Haadr8faqU9GY/rOPNk3sgrDQoo//fb4hVC1CLQJ13hef4Y53CI
+rU7m2Ys6xt0nUW7/vGT1M0NPAgMBAAGjQjBAMA4GA1UdDwEB/wQEAwIBBjAPBgNV
+HRMBAf8EBTADAQH/MB0GA1UdDgQWBBR5tFnme7bl5AFzgAiIyBpY9umbbjANBgkq
+hkiG9w0BAQsFAAOCAgEAVR9YqbyyqFDQDLHYGmkgJykIrGF1XIpu+ILlaS/V9lZL
+ubhzEFnTIZd+50xx+7LSYK05qAvqFyFWhfFQDlnrzuBZ6brJFe+GnY+EgPbk6ZGQ
+3BebYhtF8GaV0nxvwuo77x/Py9auJ/GpsMiu/X1+mvoiBOv/2X/qkSsisRcOj/KK
+NFtY2PwByVS5uCbMiogziUwthDyC3+6WVwW6LLv3xLfHTjuCvjHIInNzktHCgKQ5
+ORAzI4JMPJ+GslWYHb4phowim57iaztXOoJwTdwJx4nLCgdNbOhdjsnvzqvHu7Ur
+TkXWStAmzOVyyghqpZXjFaH3pO3JLF+l+/+sKAIuvtd7u+Nxe5AW0wdeRlN8NwdC
+jNPElpzVmbUq4JUagEiuTDkHzsxHpFKVK7q4+63SM1N95R1NbdWhscdCb+ZAJzVc
+oyi3B43njTOQ5yOf+1CceWxG1bQVs5ZufpsMljq4Ui0/1lvh+wjChP4kqKOJ2qxq
+4RgqsahDYVvTH9w7jXbyLeiNdd8XM2w9U/t7y0Ff/9yi0GE44Za4rF2LN9d11TPA
+mRGunUHBcnWEvgJBQl9nJEiU0Zsnvgc/ubhPgXRR4Xq37Z0j4r7g1SgEEzwxA57d
+emyPxgcYxn/eR44/KJ4EBs+lVDR3veyJm+kXQ99b21/+jh5Xos1AnX5iItreGCc=
+-----END CERTIFICATE-----)CERT";
 
 bool validRemoteText(const char *value, const size_t maximumLength) {
   if (value == nullptr) {
@@ -71,15 +107,35 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config,
         handleMqttMessage(topic, payload, length);
       });
   networkClient_.setTimeout(kNetworkClientTimeoutMs);
-
   if (!enabled_) {
     lastError_ = "Live upload disabled";
     return false;
   }
 
   if (strlen(config_.mqttHost) == 0) {
-    lastError_ = "MQTT host not configured";
+    lastError_ = "Upload host not configured";
     return false;
+  }
+
+  if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    if (strlen(config_.httpsPath) == 0 || strlen(config_.cloudflareAccessClientId) == 0 ||
+        strlen(config_.cloudflareAccessClientSecret) == 0 || strlen(config_.appDeviceToken) == 0) {
+      lastError_ = "HTTPS credentials not configured";
+      return false;
+    }
+#if defined(ESP8266)
+    httpsTrustAnchor_.reset(new BearSSL::X509List(kIsrgRootX1));
+    if (!httpsTrustAnchor_) {
+      lastError_ = "HTTPS trust anchor allocation failed";
+      return false;
+    }
+    httpsClient_.setTrustAnchors(httpsTrustAnchor_.get());
+#else
+    httpsClient_.setCACert(kIsrgRootX1);
+#endif
+    httpsClient_.setTimeout(kHttpsTimeoutMs);
+    lastError_ = "";
+    return true;
   }
 
   if (!Logic::mqttIdentityMatches(config_.deviceId, config_.mqttUsername)) {
@@ -100,7 +156,9 @@ void LiveUpload::loop() {
   if (remoteManagementEnabled_ &&
       Logic::intervalElapsed(nowMs, pairingCodeGeneratedMs_, kPairingCodeRefreshMs)) {
     rotatePairingCode(nowMs);
-    if (mqttClient_.connected()) {
+    if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+      publishStatus(true);
+    } else if (mqttClient_.connected()) {
       publishStatus(true);
     }
   }
@@ -109,6 +167,14 @@ void LiveUpload::loop() {
     publishOfflineStatusAndDisconnect();
     if (lastError_.isEmpty()) {
       lastError_ = "Wi-Fi disconnected";
+    }
+    return;
+  }
+
+  if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    if ((nowMs - lastStatusPublishMs_) >= kStatusHeartbeatMs &&
+        (httpsConnected_ || (nowMs - lastHttpsAttemptMs_) >= config_.reconnectIntervalMs)) {
+      publishStatus(true);
     }
     return;
   }
@@ -131,6 +197,22 @@ bool LiveUpload::publishIfDue(const AppState &state) {
   }
 
   const uint32_t nowMs = millis();
+  if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    if (lastStatusPublishMs_ == 0) {
+      if ((nowMs - lastHttpsAttemptMs_) < config_.reconnectIntervalMs || !publishStatus(true)) {
+        return false;
+      }
+    }
+    if ((nowMs - lastPublishMs_) < config_.publishIntervalMs) {
+      return false;
+    }
+    if (!publishSnapshot(state)) {
+      return false;
+    }
+    lastPublishMs_ = millis();
+    lastError_ = "";
+    return true;
+  }
   mqttClient_.loop();
 
   if (!mqttClient_.connected() && !reconnect(nowMs)) {
@@ -152,15 +234,24 @@ bool LiveUpload::publishIfDue(const AppState &state) {
 
 bool LiveUpload::isEnabled() const { return enabled_; }
 
-bool LiveUpload::isConnected() { return mqttClient_.connected(); }
+bool LiveUpload::isConnected() {
+  return config_.protocol == AppConfig::UploadConfig::Protocol::Https ? httpsConnected_
+                                                                      : mqttClient_.connected();
+}
 
-String LiveUpload::protocolName() const { return enabled_ ? "mqtt" : ""; }
+String LiveUpload::protocolName() const {
+  if (!enabled_) return "";
+  return config_.protocol == AppConfig::UploadConfig::Protocol::Https ? "https" : "mqtt";
+}
 
 String LiveUpload::serverName() const {
   if (strlen(config_.mqttHost) == 0) {
     return "Not configured";
   }
-  return String(config_.mqttHost) + ":" + String(config_.mqttPort);
+  const String endpoint = String(config_.mqttHost) + ":" + String(config_.mqttPort);
+  return config_.protocol == AppConfig::UploadConfig::Protocol::Https
+             ? endpoint + String(config_.httpsPath)
+             : endpoint;
 }
 
 String LiveUpload::sessionId() const { return sessionId_; }
@@ -208,6 +299,9 @@ void LiveUpload::acknowledgeRemoteConfig(const uint32_t version) {
   managementStatus_ = "applied";
   managementError_ = "";
   if (mqttClient_.connected()) {
+    publishStatus(true);
+  } else if (config_.protocol == AppConfig::UploadConfig::Protocol::Https &&
+             WiFi.status() == WL_CONNECTED) {
     publishStatus(true);
   }
 }
@@ -261,6 +355,10 @@ bool LiveUpload::reconnect(const uint32_t nowMs) {
 }
 
 void LiveUpload::publishOfflineStatusAndDisconnect() {
+  if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    httpsConnected_ = false;
+    return;
+  }
   if (mqttClient_.connected()) {
     if (publishStatus(false)) {
       mqttClient_.disconnect();
@@ -270,6 +368,16 @@ void LiveUpload::publishOfflineStatusAndDisconnect() {
 
 bool LiveUpload::publishStatus(const bool connected) {
   const String payload = buildStatusJson(connected);
+  if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    String response;
+    if (!postHttps("status", payload, &response)) {
+      return false;
+    }
+    httpsConnected_ = connected;
+    lastStatusPublishMs_ = millis();
+    consumeHttpsDesiredConfig(response);
+    return true;
+  }
   if (!mqttClient_.publish(statusTopic().c_str(), payload.c_str(), true)) {
     lastError_ = "MQTT status publish failed";
     return false;
@@ -350,12 +458,73 @@ bool LiveUpload::parseRemoteConfig(const uint8_t *payload,
 bool LiveUpload::publishSnapshot(const AppState &state) {
   const uint32_t sequence = lastSequence_ + 1;
   const String payload = buildSnapshotJson(state, sequence);
-  if (!mqttClient_.publish(liveTopic().c_str(), payload.c_str(), false)) {
+  if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    if (!postHttps("snapshot", payload)) {
+      return false;
+    }
+    httpsConnected_ = true;
+  } else if (!mqttClient_.publish(liveTopic().c_str(), payload.c_str(), false)) {
     lastError_ = "MQTT live publish failed";
     return false;
   }
   lastSequence_ = sequence;
   return true;
+}
+
+bool LiveUpload::postHttps(const char *kind, const String &payload, String *responseBody) {
+  lastHttpsAttemptMs_ = millis();
+  HTTPClient http;
+  http.setTimeout(kHttpsTimeoutMs);
+  http.setReuse(true);
+  String url = "https://" + String(config_.mqttHost);
+  if (config_.mqttPort != 443) {
+    url += ":" + String(config_.mqttPort);
+  }
+  url += String(config_.httpsPath) + "/" + String(kind);
+  if (!http.begin(httpsClient_, url)) {
+    lastError_ = "HTTPS request setup failed";
+    httpsConnected_ = false;
+    return false;
+  }
+  http.addHeader("Content-Type", "application/json");
+  http.addHeader("Authorization", "Bearer " + String(config_.appDeviceToken));
+  http.addHeader("CF-Access-Client-Id", config_.cloudflareAccessClientId);
+  http.addHeader("CF-Access-Client-Secret", config_.cloudflareAccessClientSecret);
+  const int status = http.POST(payload);
+  const String body = status > 0 ? http.getString() : "";
+  http.end();
+  if (status < 200 || status >= 300) {
+    lastError_ = status < 0 ? "HTTPS transport error " + String(status)
+                            : "HTTPS upload rejected " + String(status);
+    httpsConnected_ = false;
+    return false;
+  }
+  if (responseBody != nullptr) {
+    *responseBody = body;
+  }
+  return true;
+}
+
+void LiveUpload::consumeHttpsDesiredConfig(const String &responseBody) {
+  if (!remoteManagementEnabled_ || responseBody.isEmpty()) {
+    return;
+  }
+  StaticJsonDocument<kHttpsResponseJsonCapacity> document;
+  if (deserializeJson(document, responseBody) != DeserializationError::Ok ||
+      !document["desired_config"].is<JsonObject>()) {
+    return;
+  }
+  String encoded;
+  serializeJson(document["desired_config"], encoded);
+  RemoteConfig candidate{};
+  if (!parseRemoteConfig(reinterpret_cast<const uint8_t *>(encoded.c_str()), encoded.length(), candidate) ||
+      candidate.version <= appliedConfigVersion_) {
+    return;
+  }
+  pendingRemoteConfig_ = candidate;
+  hasPendingRemoteConfig_ = true;
+  managementStatus_ = "pending";
+  managementError_ = "";
 }
 
 String LiveUpload::liveTopic() const {
@@ -382,7 +551,7 @@ String LiveUpload::buildStatusJson(const bool connected) const {
   json += "\"schema_version\":" + String(Logic::kLivePayloadSchemaVersion) + ",";
   json += "\"device_id\":\"" + jsonEscape(deviceId_) + "\",";
   json += "\"session_id\":\"" + jsonEscape(sessionId_) + "\",";
-  json += "\"protocol\":\"mqtt\",";
+  json += "\"protocol\":\"" + protocolName() + "\",";
   json += "\"connected\":" + String(connected ? "true" : "false");
   if (remoteManagementEnabled_) {
     json += ",\"management\":{";

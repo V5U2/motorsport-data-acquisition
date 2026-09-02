@@ -26,6 +26,24 @@
 #ifndef APEXI_MQTT_PASSWORD
 #define APEXI_MQTT_PASSWORD ""
 #endif
+#ifndef APEXI_HTTPS_UPLOAD_ENABLED
+#define APEXI_HTTPS_UPLOAD_ENABLED 0
+#endif
+#ifndef APEXI_HTTPS_HOST
+#define APEXI_HTTPS_HOST ""
+#endif
+#ifndef APEXI_HTTPS_PATH
+#define APEXI_HTTPS_PATH "/api/v1/device/loggers/ingest"
+#endif
+#ifndef APEXI_CF_ACCESS_CLIENT_ID
+#define APEXI_CF_ACCESS_CLIENT_ID ""
+#endif
+#ifndef APEXI_CF_ACCESS_CLIENT_SECRET
+#define APEXI_CF_ACCESS_CLIENT_SECRET ""
+#endif
+#ifndef APEXI_APP_DEVICE_TOKEN
+#define APEXI_APP_DEVICE_TOKEN ""
+#endif
 #ifndef APEXI_FIRMWARE_VERSION
 #define APEXI_FIRMWARE_VERSION "dev"
 #endif
@@ -95,6 +113,8 @@ struct OtaConfig {
 };
 
 struct UploadConfig {
+  enum class Protocol : uint8_t { Mqtt, Https };
+  Protocol protocol;
   const char *deviceId;
   const char *mqttHost;
   uint16_t mqttPort;
@@ -103,6 +123,10 @@ struct UploadConfig {
   const char *topicPrefix;
   uint32_t publishIntervalMs;
   uint16_t reconnectIntervalMs;
+  const char *httpsPath;
+  const char *cloudflareAccessClientId;
+  const char *cloudflareAccessClientSecret;
+  const char *appDeviceToken;
 };
 
 struct RtcConfig {
@@ -216,14 +240,19 @@ inline constexpr OtaConfig kOta{
 };
 
 inline constexpr UploadConfig kLiveUpload{
+    APEXI_HTTPS_UPLOAD_ENABLED ? UploadConfig::Protocol::Https : UploadConfig::Protocol::Mqtt,
     "mda-logger",
-    APEXI_MQTT_HOST,
-    1883,
+    APEXI_HTTPS_UPLOAD_ENABLED ? APEXI_HTTPS_HOST : APEXI_MQTT_HOST,
+    APEXI_HTTPS_UPLOAD_ENABLED ? 443 : 1883,
     APEXI_MQTT_USERNAME,
     APEXI_MQTT_PASSWORD,
     "motorsport/logger",
     250,
     5000,
+    APEXI_HTTPS_PATH,
+    APEXI_CF_ACCESS_CLIENT_ID,
+    APEXI_CF_ACCESS_CLIENT_SECRET,
+    APEXI_APP_DEVICE_TOKEN,
 };
 
 inline constexpr DisplayConfig kDisplay{
