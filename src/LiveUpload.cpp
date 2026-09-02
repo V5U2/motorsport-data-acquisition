@@ -326,6 +326,18 @@ String LiveUpload::managementStatus() const { return managementStatus_; }
 
 String LiveUpload::managementError() const { return managementError_; }
 
+void LiveUpload::setReportedConfig(const bool uploadEnabled,
+                                   const char *ntpPrimary,
+                                   const char *ntpSecondary,
+                                   const char *timeZoneRule,
+                                   const char *timeZoneLabel) {
+  reportedUploadEnabled_ = uploadEnabled;
+  reportedNtpPrimary_ = ntpPrimary == nullptr ? "" : ntpPrimary;
+  reportedNtpSecondary_ = ntpSecondary == nullptr ? "" : ntpSecondary;
+  reportedTimeZoneRule_ = timeZoneRule == nullptr ? "" : timeZoneRule;
+  reportedTimeZoneLabel_ = timeZoneLabel == nullptr ? "" : timeZoneLabel;
+}
+
 void LiveUpload::rotatePairingCode(const uint32_t nowMs) {
 #if defined(ESP8266)
   const uint64_t entropy = (static_cast<uint64_t>(ESP.random()) << 32) | ESP.random();
@@ -683,7 +695,13 @@ String LiveUpload::buildStatusJson(const bool connected) const {
     json += "\"config_version\":" + String(appliedConfigVersion_) + ",";
     json += "\"status\":\"" + jsonEscape(managementStatus_) + "\",";
     json += "\"error\":\"" + jsonEscape(managementError_) + "\",";
-    json += "\"firmware_version\":\"" + jsonEscape(APEXI_FIRMWARE_VERSION) + "\"";
+    json += "\"firmware_version\":\"" + jsonEscape(APEXI_FIRMWARE_VERSION) + "\",";
+    json += "\"settings\":{";
+    json += "\"upload_enabled\":" + String(reportedUploadEnabled_ ? "true" : "false") + ",";
+    json += "\"ntp_primary\":\"" + jsonEscape(reportedNtpPrimary_) + "\",";
+    json += "\"ntp_secondary\":\"" + jsonEscape(reportedNtpSecondary_) + "\",";
+    json += "\"tz_rule\":\"" + jsonEscape(reportedTimeZoneRule_) + "\",";
+    json += "\"tz_label\":\"" + jsonEscape(reportedTimeZoneLabel_) + "\"}";
     json += "}";
   }
   json += "}";

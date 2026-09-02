@@ -277,6 +277,11 @@ void setup() {
                    runtimeSettings.liveUploadEnabled(),
                    runtimeSettings.remoteManagementEnabled(),
                    runtimeSettings.appliedConfigVersion());
+  liveUpload.setReportedConfig(runtimeSettings.liveUploadEnabled(),
+                               runtimeSettings.ntpPrimary(),
+                               runtimeSettings.ntpSecondary(),
+                               runtimeSettings.timeZoneRule(),
+                               runtimeSettings.timeZoneLabel());
   Serial.print("storeForwardReady=");
   Serial.print(liveUpload.storeForwardReady() ? "1" : "0");
   Serial.print(" pending=");
@@ -333,6 +338,11 @@ void loop() {
   RemoteConfig remoteConfig{};
   if (liveUpload.consumeRemoteConfig(remoteConfig)) {
     if (runtimeSettings.applyRemoteConfig(remoteConfig)) {
+      liveUpload.setReportedConfig(runtimeSettings.liveUploadEnabled(),
+                                   runtimeSettings.ntpPrimary(),
+                                   runtimeSettings.ntpSecondary(),
+                                   runtimeSettings.timeZoneRule(),
+                                   runtimeSettings.timeZoneLabel());
       liveUpload.acknowledgeRemoteConfig(remoteConfig.version);
       Serial.print("remoteConfigApplied=");
       Serial.println(remoteConfig.version);

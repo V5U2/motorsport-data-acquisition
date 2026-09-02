@@ -44,6 +44,11 @@ class LiveUpload {
   uint32_t pairingCodeExpiresInSeconds() const;
   String managementStatus() const;
   String managementError() const;
+  void setReportedConfig(bool uploadEnabled,
+                         const char *ntpPrimary,
+                         const char *ntpSecondary,
+                         const char *timeZoneRule,
+                         const char *timeZoneLabel);
   bool consumeRemoteConfig(RemoteConfig &config);
   void acknowledgeRemoteConfig(uint32_t version);
 
@@ -91,6 +96,11 @@ class LiveUpload {
   uint32_t pairingCodeGeneratedMs_ = 0;
   String managementStatus_ = "ready";
   String managementError_;
+  bool reportedUploadEnabled_ = false;
+  String reportedNtpPrimary_;
+  String reportedNtpSecondary_;
+  String reportedTimeZoneRule_;
+  String reportedTimeZoneLabel_;
   RemoteConfig pendingRemoteConfig_{};
   bool hasPendingRemoteConfig_ = false;
   bool httpsConnected_ = false;
