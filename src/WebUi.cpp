@@ -557,7 +557,7 @@ String WebUi::diagnosticsHtml() const {
     .actions { display:flex; gap:8px; }
     .action-link { padding:9px 12px; border:1px solid var(--border); border-radius:8px; color:var(--text); text-decoration:none; }
     main { width:min(100%,72rem); margin:0 auto; padding:16px; }
-    .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
+    .grid { display:grid; gap:12px; grid-template-columns:repeat(2,minmax(0,1fr)); }
     .card { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; }
     .label { color:var(--muted); font-size:.78rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
     .status { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-top:11px; font-size:.94rem; }
