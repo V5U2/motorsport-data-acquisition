@@ -49,6 +49,10 @@ struct SystemStatus {
   String uploadSessionId;
   String lastUploadError;
   uint32_t lastUploadSequence;
+  bool remoteManagementEnabled;
+  uint32_t appliedConfigVersion;
+  String remoteManagementStatus;
+  String remoteManagementError;
   bool storeForwardEnabled;
   bool storeForwardReady;
   uint32_t storeForwardPendingRecords;

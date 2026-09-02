@@ -126,7 +126,7 @@ void WebUi::handleSettings() {
   const bool httpsUpload = upload.protocol == AppConfig::UploadConfig::Protocol::Https;
   String html = R"rawliteral(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Logger Settings</title><style>body{font-family:system-ui;max-width:38rem;margin:2rem auto;padding:0 1rem;background:#09131f;color:#ecf2f8}label{display:block;margin:1rem 0}.hint{color:#95a8ba}input{box-sizing:border-box;width:100%;padding:.7rem;margin-top:.3rem}input[type=checkbox]{width:auto}button{padding:.8rem 1.2rem}a{color:#6dd6ff}h2{margin-top:2rem}</style></head><body><h1>Device settings</h1><form method="post" action="/settings"><h2>Upstream server</h2>)rawliteral";
   html += httpsUpload
-              ? R"rawliteral(<p class="hint">HTTPS through Cloudflare Access. Access and app credentials remain compiled in the local secrets header and are never returned by this page.</p>)rawliteral"
+              ? R"rawliteral(<p class="hint">HTTPS through Cloudflare Access. Credentials may be compiled into the firmware or replaced below. Stored values are never returned by this page.</p>)rawliteral"
               : R"rawliteral(<p class="hint">MQTT credentials remain in the local secrets header and are never returned by this page.</p>)rawliteral";
   html += "<p>Protocol: <strong>" + String(httpsUpload ? "HTTPS" : "MQTT") + "</strong></p>";
   html += R"rawliteral(<label><input type="checkbox" name="enabled" value="1")rawliteral";
@@ -152,7 +152,21 @@ void WebUi::handleSettings() {
   html += httpsUpload ? "HTTPS port" : "MQTT port";
   html += R"rawliteral(<input name="port" type="number" min="1" max="65535" required value=")rawliteral";
   html += String(upload.mqttPort);
-  html += R"rawliteral("></label><h2>Network time</h2><label>Primary NTP server<input name="ntp_primary" required maxlength="63" value=")rawliteral";
+  html += R"rawliteral("></label>)rawliteral";
+  if (httpsUpload) {
+    const String clientIdState = settings_->cloudflareAccessClientIdConfigured()
+                                     ? "Configured — leave blank to keep"
+                                     : "Not configured";
+    const String clientSecretState = settings_->cloudflareAccessClientSecretConfigured()
+                                         ? "Configured — leave blank to keep"
+                                         : "Not configured";
+    html += R"rawliteral(<h2>Cloudflare Access</h2><p class="hint">Enter either field only when replacing it. Existing values are write-only and cannot be retrieved from the logger.</p><label>Client ID<input name="cf_access_client_id" type="password" autocomplete="new-password" spellcheck="false" maxlength="127" placeholder=")rawliteral";
+    html += htmlEscape(clientIdState);
+    html += R"rawliteral("></label><label>Client secret<input name="cf_access_client_secret" type="password" autocomplete="new-password" spellcheck="false" maxlength="127" placeholder=")rawliteral";
+    html += htmlEscape(clientSecretState);
+    html += R"rawliteral("></label>)rawliteral";
+  }
+  html += R"rawliteral(<h2>Network time</h2><label>Primary NTP server<input name="ntp_primary" required maxlength="63" value=")rawliteral";
   html += htmlEscape(settings_->ntpPrimary());
   html += R"rawliteral("></label><label>Secondary NTP server<input name="ntp_secondary" required maxlength="63" value=")rawliteral";
   html += htmlEscape(settings_->ntpSecondary());
@@ -186,7 +200,9 @@ void WebUi::handleSettingsSave() {
                        server_.arg("tz_rule"),
                        server_.arg("tz_label"),
                        remoteManagementEnabled,
-                       settings_->appliedConfigVersion())) {
+                       settings_->appliedConfigVersion(),
+                       server_.arg("cf_access_client_id"),
+                       server_.arg("cf_access_client_secret"))) {
     server_.send(400, "text/plain", "Invalid settings");
     return;
   }
@@ -309,6 +325,14 @@ String WebUi::liveJson() const {
   json += "\"upload_server\":\"" + jsonEscape(state_.system.uploadServer) + "\",";
   json += "\"upload_session_id\":\"" + state_.system.uploadSessionId + "\",";
   json += "\"upload_sequence\":" + String(state_.system.lastUploadSequence) + ",";
+  json += "\"remote_management_enabled\":" +
+          String(state_.system.remoteManagementEnabled ? "true" : "false") + ",";
+  json += "\"applied_config_version\":" +
+          String(state_.system.appliedConfigVersion) + ",";
+  json += "\"remote_management_status\":\"" +
+          jsonEscape(state_.system.remoteManagementStatus) + "\",";
+  json += "\"remote_management_error\":\"" +
+          jsonEscape(state_.system.remoteManagementError) + "\",";
   json += "\"store_forward_enabled\":" +
           String(state_.system.storeForwardEnabled ? "true" : "false") + ",";
   json += "\"store_forward_ready\":" +
@@ -349,40 +373,75 @@ String WebUi::indexHtml() const {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Motorsport Logger</title>
   <style>
-    body { margin: 0; font-family: "Segoe UI", sans-serif; background: #09131f; color: #ecf2f8; }
-    header { padding: 18px 20px; background: linear-gradient(120deg, #10263a, #173b2d); }
+    :root { --bg:#09131f; --surface:#111d2a; --border:#29394a; --text:#ecf2f8; --muted:#95a8ba; --accent:#6dd6ff; --ok:#73d5a2; --warn:#f4c46c; --bad:#ff8d8d; }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; background: var(--bg); color: var(--text); }
+    header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px; background:#102235; border-bottom:1px solid var(--border); }
     h1 { margin: 0; font-size: 1.4rem; }
-    .grid { display: grid; gap: 16px; padding: 16px; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-    .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 16px; }
-    .label { color: #95a8ba; font-size: 0.9rem; }
-    .value { font-size: 2.2rem; margin-top: 6px; }
-    .status { display: flex; justify-content: space-between; margin-top: 8px; font-size: 0.95rem; }
-    ul { padding-left: 18px; }
-    a { color: #6dd6ff; }
+    .header-meta { margin-top:4px; color:var(--muted); font-size:.88rem; }
+    .settings-link { flex:none; padding:9px 12px; border:1px solid var(--border); border-radius:8px; text-decoration:none; }
+    .grid { display: grid; gap: 16px; padding: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
+    .card { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .label { color:var(--muted); font-size:.78rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .value { font-size:2.2rem; margin-top:6px; }
+    .status { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-top:11px; font-size:.94rem; }
+    .status > :last-child { min-width:0; text-align:right; }
+    .detail-row { display:block; padding-top:11px; border-top:1px solid rgba(149,168,186,.16); }
+    .detail-row span { display:block; }
+    .detail-row span:last-child { margin-top:4px; color:var(--text); text-align:left; overflow-wrap:anywhere; }
+    .state { font-size:.78rem; font-weight:700; letter-spacing:.04em; }
+    .state.ok { color:var(--ok); }
+    .state.warn { color:var(--warn); }
+    .state.bad { color:var(--bad); }
+    .diagnostic { color:var(--muted); overflow-wrap:anywhere; }
+    ul { margin-bottom:0; padding-left:18px; }
+    li + li { margin-top:8px; }
+    a { color:var(--accent); }
+    a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    @media (max-width:560px) { header { padding:16px; } .grid { padding:12px; gap:12px; grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
   <header>
-    <h1>Motorsport Sensor Logger</h1>
-    <div id="stamp">Waiting for data...</div>
+    <div><h1>Motorsport Sensor Logger</h1><div class="header-meta" id="stamp">Waiting for data...</div></div>
+    <a class="settings-link" href="/settings">Settings</a>
   </header>
   <section class="grid">
 )rawliteral";
 
   const String htmlEnd = R"rawliteral(
     <div class="card">
-      <div class="label">System</div>
-      <div class="status"><span>ADC</span><span id="adcStatus">--</span></div>
-      <div class="status"><span>RTC</span><span id="rtcStatus">--</span></div>
-      <div class="status"><span>Last time sync</span><span id="rtcLastSync">--</span></div>
-      <div class="status"><span>SD</span><span id="sdStatus">--</span></div>
-      <div class="status"><span>Upload</span><span id="uploadStatus">--</span></div>
-      <div class="status"><span>Server</span><span id="uploadServer">--</span></div>
-      <div class="status"><span>Onboard queue</span><span id="queueStatus">--</span></div>
-      <div class="status"><span>OTA</span><span id="otaStatus">--</span></div>
+      <div class="label">Connectivity</div>
+      <div class="status"><span>Server</span><span class="state" id="uploadStatus">--</span></div>
+      <div class="status"><span>Protocol</span><span id="uploadProtocol">--</span></div>
       <div class="status"><span>Wi-Fi</span><span id="wifiStatus">--</span></div>
-      <div class="status"><span>Log file</span><span id="logFile">--</span></div>
-      <div class="status"><span>Configuration</span><span><a href="/settings">Settings</a></span></div>
+      <div class="status"><span>Remote management</span><span class="state" id="remoteManagementStatus">--</span></div>
+      <div class="status"><span>Applied configuration</span><span id="configVersion">--</span></div>
+      <div class="status detail-row"><span>Upstream endpoint</span><span id="uploadServer">--</span></div>
+    </div>
+    <div class="card">
+      <div class="label">Hardware</div>
+      <div class="status"><span>ADC</span><span class="state" id="adcStatus">--</span></div>
+      <div class="status"><span>RTC</span><span class="state" id="rtcStatus">--</span></div>
+      <div class="status"><span>Last time sync</span><span id="rtcLastSync">--</span></div>
+      <div class="status"><span>OTA updates</span><span class="state" id="otaStatus">--</span></div>
+    </div>
+    <div class="card">
+      <div class="label">Storage</div>
+      <div class="status"><span>Onboard queue</span><span id="queueStatus">--</span></div>
+      <div class="status"><span>Dropped records</span><span id="queueDropped">--</span></div>
+      <div class="status"><span>SD logging</span><span class="state" id="sdStatus">--</span></div>
+      <div class="status detail-row"><span>Current log file</span><span id="logFile">--</span></div>
+    </div>
+    <div class="card">
+      <div class="label">Diagnostics</div>
+      <div class="status detail-row"><span>Upload session</span><span class="diagnostic" id="uploadSession">--</span></div>
+      <div class="status"><span>Upload sequence</span><span id="uploadSequence">--</span></div>
+      <div class="status detail-row"><span>Upload</span><span class="diagnostic" id="uploadError">No errors</span></div>
+      <div class="status detail-row"><span>Remote management</span><span class="diagnostic" id="remoteManagementError">No errors</span></div>
+      <div class="status detail-row"><span>Queue</span><span class="diagnostic" id="queueError">No errors</span></div>
+      <div class="status detail-row"><span>RTC</span><span class="diagnostic" id="rtcError">No errors</span></div>
+      <div class="status detail-row"><span>Logging</span><span class="diagnostic" id="logError">No errors</span></div>
     </div>
     <div class="card">
       <div class="label">CSV Files</div>
@@ -390,6 +449,12 @@ String WebUi::indexHtml() const {
     </div>
   </section>
   <script>
+    function setState(id, text, tone) {
+      const target = document.getElementById(id);
+      target.textContent = text;
+      target.className = 'state' + (tone ? ' ' + tone : '');
+    }
+
     async function refreshLive() {
       const response = await fetch('/api/live');
       const data = await response.json();
@@ -399,20 +464,36 @@ String WebUi::indexHtml() const {
         document.getElementById('sensor-loop-' + sensor.id).textContent = sensor.loop_mA.toFixed(2) + ' mA';
         document.getElementById('sensor-fault-' + sensor.id).textContent = sensor.fault;
       });
-      document.getElementById('adcStatus').textContent = data.system.adc_ready ? 'OK' : 'FAULT';
-      document.getElementById('rtcStatus').textContent = data.system.rtc_enabled ? (data.system.rtc_ready ? (data.system.rtc_synced ? 'NTP SYNCED' : 'HOLDOVER') : 'FAULT') : 'DISABLED';
+      setState('adcStatus', data.system.adc_ready ? 'READY' : 'FAULT', data.system.adc_ready ? 'ok' : 'bad');
+      const rtcText = data.system.rtc_enabled ? (data.system.rtc_ready ? (data.system.rtc_synced ? 'NTP SYNCED' : 'HOLDOVER') : 'FAULT') : 'DISABLED';
+      setState('rtcStatus', rtcText, rtcText === 'FAULT' ? 'bad' : (rtcText === 'NTP SYNCED' ? 'ok' : 'warn'));
       document.getElementById('rtcLastSync').textContent = data.system.rtc_last_sync || '--';
-      document.getElementById('sdStatus').textContent = data.system.sd_enabled ? (data.system.sd_ready ? 'OK' : 'FAULT') : 'DISABLED';
-      document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? data.system.upload_protocol.toUpperCase() + ' LIVE' : 'WAITING') : 'DISABLED';
+      const sdText = data.system.sd_enabled ? (data.system.sd_ready ? 'READY' : 'FAULT') : 'DISABLED';
+      setState('sdStatus', sdText, sdText === 'FAULT' ? 'bad' : (sdText === 'READY' ? 'ok' : ''));
+      const uploadText = data.system.upload_enabled ? (data.system.upload_connected ? 'CONNECTED' : 'WAITING') : 'DISABLED';
+      setState('uploadStatus', uploadText, uploadText === 'CONNECTED' ? 'ok' : (uploadText === 'WAITING' ? 'warn' : ''));
+      document.getElementById('uploadProtocol').textContent = data.system.upload_protocol.toUpperCase();
       document.getElementById('uploadServer').textContent = data.system.upload_server || 'Not configured';
+      const remoteText = data.system.remote_management_enabled ? 'ENABLED' : 'DISABLED';
+      setState('remoteManagementStatus', remoteText, data.system.remote_management_enabled ? 'ok' : '');
+      document.getElementById('configVersion').textContent = 'v' + data.system.applied_config_version + ' ' + (data.system.remote_management_status || 'ready');
       document.getElementById('queueStatus').textContent = data.system.store_forward_enabled
         ? (data.system.store_forward_ready
           ? data.system.store_forward_pending_records + ' pending / ' + Math.round(data.system.store_forward_pending_bytes / 1024) + ' KiB'
           : 'FAULT')
         : 'DISABLED';
-      document.getElementById('otaStatus').textContent = data.system.ota_enabled ? (data.system.ota_ready ? 'READY' : 'LOCKED') : 'DISABLED';
+      document.getElementById('queueDropped').textContent = data.system.store_forward_dropped_records;
+      const otaText = data.system.ota_enabled ? (data.system.ota_ready ? 'READY' : 'LOCKED') : 'DISABLED';
+      setState('otaStatus', otaText, otaText === 'READY' ? 'ok' : (otaText === 'LOCKED' ? 'warn' : ''));
       document.getElementById('wifiStatus').textContent = data.system.wifi_mode + ' ' + data.system.ip_address;
       document.getElementById('logFile').textContent = data.system.current_log_file || '--';
+      document.getElementById('uploadSession').textContent = data.system.upload_session_id || '--';
+      document.getElementById('uploadSequence').textContent = data.system.upload_sequence;
+      document.getElementById('uploadError').textContent = data.system.last_upload_error || 'No errors';
+      document.getElementById('remoteManagementError').textContent = data.system.remote_management_error || 'No errors';
+      document.getElementById('queueError').textContent = data.system.store_forward_error || 'No errors';
+      document.getElementById('rtcError').textContent = data.system.rtc_error || 'No errors';
+      document.getElementById('logError').textContent = data.system.last_log_error || 'No errors';
     }
 
     async function refreshFiles() {
@@ -420,6 +501,12 @@ String WebUi::indexHtml() const {
       const files = await response.json();
       const target = document.getElementById('fileList');
       target.innerHTML = '';
+      if (!files.length) {
+        const empty = document.createElement('li');
+        empty.textContent = 'No files available';
+        target.appendChild(empty);
+        return;
+      }
       files.forEach((file) => {
         const li = document.createElement('li');
         const a = document.createElement('a');
@@ -430,17 +517,18 @@ String WebUi::indexHtml() const {
       });
     }
 
-    async function refreshAll() {
+    async function refreshLiveSafely() {
       try {
         await refreshLive();
-        await refreshFiles();
       } catch (error) {
         document.getElementById('stamp').textContent = 'Web UI refresh failed';
       }
     }
 
-    refreshAll();
-    setInterval(refreshAll, 1000);
+    refreshLiveSafely();
+    refreshFiles().catch(() => {});
+    setInterval(refreshLiveSafely, 1000);
+    setInterval(() => refreshFiles().catch(() => {}), 10000);
   </script>
 </body>
 </html>

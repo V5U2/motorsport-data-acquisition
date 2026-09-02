@@ -135,6 +135,10 @@ AppState buildState() {
   state.system.uploadSessionId = liveUpload.sessionId();
   state.system.lastUploadError = liveUpload.lastError();
   state.system.lastUploadSequence = liveUpload.lastSequence();
+  state.system.remoteManagementEnabled = runtimeSettings.remoteManagementEnabled();
+  state.system.appliedConfigVersion = runtimeSettings.appliedConfigVersion();
+  state.system.remoteManagementStatus = liveUpload.managementStatus();
+  state.system.remoteManagementError = liveUpload.managementError();
   state.system.storeForwardEnabled = liveUpload.storeForwardEnabled();
   state.system.storeForwardReady = liveUpload.storeForwardReady();
   state.system.storeForwardPendingRecords = liveUpload.storeForwardPendingRecords();

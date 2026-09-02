@@ -85,6 +85,8 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config,
   enabled_ = enabled;
   remoteManagementEnabled_ = remoteManagementEnabled;
   appliedConfigVersion_ = appliedConfigVersion;
+  managementStatus_ = appliedConfigVersion_ > 0 ? "applied" : "ready";
+  managementError_ = "";
 
   const std::string normalizedDevice = Logic::normalizeTopicSegment(config.deviceId);
   deviceId_ = normalizedDevice.empty() ? "mda-logger" : String(normalizedDevice.c_str());
@@ -319,6 +321,10 @@ uint32_t LiveUpload::pairingCodeExpiresInSeconds() const {
   }
   return (kPairingCodeRefreshMs - elapsedMs + 999UL) / 1000UL;
 }
+
+String LiveUpload::managementStatus() const { return managementStatus_; }
+
+String LiveUpload::managementError() const { return managementError_; }
 
 void LiveUpload::rotatePairingCode(const uint32_t nowMs) {
 #if defined(ESP8266)

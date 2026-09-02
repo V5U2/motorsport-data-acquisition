@@ -12,14 +12,27 @@ bool RuntimeSettings::begin(const AppConfig::UploadConfig &defaults,
   Record record{};
   EEPROM.get(0, record);
   if (!valid(record)) {
+    Version4Record version4{};
     Version3Record version3{};
     Version2Record version2{};
     LegacyRecord legacy{};
     EEPROM.get(0, version2);
     EEPROM.get(0, version3);
+    EEPROM.get(0, version4);
     EEPROM.get(0, legacy);
     populateDefaults(record, defaults, defaultUploadEnabled);
-    if (valid(version3)) {
+    if (valid(version4)) {
+      record.uploadEnabled = version4.uploadEnabled;
+      record.remoteManagementEnabled = version4.remoteManagementEnabled;
+      record.uploadProtocol = version4.uploadProtocol;
+      record.mqttPort = version4.mqttPort;
+      record.appliedConfigVersion = version4.appliedConfigVersion;
+      strncpy(record.mqttHost, version4.mqttHost, sizeof(record.mqttHost) - 1);
+      strncpy(record.ntpPrimary, version4.ntpPrimary, sizeof(record.ntpPrimary) - 1);
+      strncpy(record.ntpSecondary, version4.ntpSecondary, sizeof(record.ntpSecondary) - 1);
+      strncpy(record.timeZoneRule, version4.timeZoneRule, sizeof(record.timeZoneRule) - 1);
+      strncpy(record.timeZoneLabel, version4.timeZoneLabel, sizeof(record.timeZoneLabel) - 1);
+    } else if (valid(version3)) {
       record.uploadEnabled = version3.uploadEnabled;
       record.remoteManagementEnabled = version3.remoteManagementEnabled;
       record.appliedConfigVersion = version3.appliedConfigVersion;
@@ -61,12 +74,18 @@ bool RuntimeSettings::save(const String &host,
                            const String &timeZoneRule,
                            const String &timeZoneLabel,
                            const bool remoteManagementEnabled,
-                           const uint32_t appliedConfigVersion) {
+                           const uint32_t appliedConfigVersion,
+                           const String &cloudflareAccessClientId,
+                           const String &cloudflareAccessClientSecret) {
   if (!validText(host, kHostCapacity) || port == 0 ||
       !validText(ntpPrimary, kNtpCapacity) ||
       !validText(ntpSecondary, kNtpCapacity) ||
       !validText(timeZoneRule, kTimeZoneRuleCapacity) ||
-      !validText(timeZoneLabel, kTimeZoneLabelCapacity)) {
+      !validText(timeZoneLabel, kTimeZoneLabelCapacity) ||
+      (!cloudflareAccessClientId.isEmpty() &&
+       !validText(cloudflareAccessClientId, kCloudflareCredentialCapacity)) ||
+      (!cloudflareAccessClientSecret.isEmpty() &&
+       !validText(cloudflareAccessClientSecret, kCloudflareCredentialCapacity))) {
     return false;
   }
 
@@ -84,6 +103,16 @@ bool RuntimeSettings::save(const String &host,
   ntpSecondary.toCharArray(record.ntpSecondary, sizeof(record.ntpSecondary));
   timeZoneRule.toCharArray(record.timeZoneRule, sizeof(record.timeZoneRule));
   timeZoneLabel.toCharArray(record.timeZoneLabel, sizeof(record.timeZoneLabel));
+  const String clientId = cloudflareAccessClientId.isEmpty()
+                              ? String(cloudflareAccessClientId_)
+                              : cloudflareAccessClientId;
+  const String clientSecret = cloudflareAccessClientSecret.isEmpty()
+                                  ? String(cloudflareAccessClientSecret_)
+                                  : cloudflareAccessClientSecret;
+  clientId.toCharArray(record.cloudflareAccessClientId,
+                       sizeof(record.cloudflareAccessClientId));
+  clientSecret.toCharArray(record.cloudflareAccessClientSecret,
+                           sizeof(record.cloudflareAccessClientSecret));
   record.checksum = checksum(record);
 
   EEPROM.put(0, record);
@@ -135,6 +164,14 @@ bool RuntimeSettings::remoteManagementEnabled() const { return remoteManagementE
 
 uint32_t RuntimeSettings::appliedConfigVersion() const { return appliedConfigVersion_; }
 
+bool RuntimeSettings::cloudflareAccessClientIdConfigured() const {
+  return cloudflareAccessClientId_[0] != '\0';
+}
+
+bool RuntimeSettings::cloudflareAccessClientSecretConfigured() const {
+  return cloudflareAccessClientSecret_[0] != '\0';
+}
+
 uint32_t RuntimeSettings::checksum(const Record &record) {
   const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&record);
   uint32_t value = 2166136261UL;
@@ -165,6 +202,16 @@ uint32_t RuntimeSettings::checksum(const Version2Record &record) {
   return value;
 }
 
+uint32_t RuntimeSettings::checksum(const Version4Record &record) {
+  const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&record);
+  uint32_t value = 2166136261UL;
+  for (size_t index = 0; index < offsetof(Version4Record, checksum); ++index) {
+    value ^= bytes[index];
+    value *= 16777619UL;
+  }
+  return value;
+}
+
 uint32_t RuntimeSettings::checksum(const Version3Record &record) {
   const uint8_t *bytes = reinterpret_cast<const uint8_t *>(&record);
   uint32_t value = 2166136261UL;
@@ -189,12 +236,28 @@ bool RuntimeSettings::valid(const Record &record) {
          record.timeZoneRule[kTimeZoneRuleCapacity - 1] == '\0' &&
          record.timeZoneLabel[0] != '\0' &&
          record.timeZoneLabel[kTimeZoneLabelCapacity - 1] == '\0' &&
+         record.cloudflareAccessClientId[kCloudflareCredentialCapacity - 1] == '\0' &&
+         record.cloudflareAccessClientSecret[kCloudflareCredentialCapacity - 1] == '\0' &&
          record.checksum == checksum(record);
 }
 
 bool RuntimeSettings::valid(const Version3Record &record) {
   return record.magic == kMagic && record.version == 3 &&
          record.size == sizeof(Version3Record) && record.mqttPort != 0 &&
+         record.mqttHost[0] != '\0' && record.mqttHost[kHostCapacity - 1] == '\0' &&
+         record.ntpPrimary[0] != '\0' && record.ntpPrimary[kNtpCapacity - 1] == '\0' &&
+         record.ntpSecondary[0] != '\0' && record.ntpSecondary[kNtpCapacity - 1] == '\0' &&
+         record.timeZoneRule[0] != '\0' &&
+         record.timeZoneRule[kTimeZoneRuleCapacity - 1] == '\0' &&
+         record.timeZoneLabel[0] != '\0' &&
+         record.timeZoneLabel[kTimeZoneLabelCapacity - 1] == '\0' &&
+         record.checksum == checksum(record);
+}
+
+bool RuntimeSettings::valid(const Version4Record &record) {
+  return record.magic == kMagic && record.version == 4 &&
+         record.size == sizeof(Version4Record) && record.mqttPort != 0 &&
+         record.uploadProtocol <= static_cast<uint8_t>(AppConfig::UploadConfig::Protocol::Https) &&
          record.mqttHost[0] != '\0' && record.mqttHost[kHostCapacity - 1] == '\0' &&
          record.ntpPrimary[0] != '\0' && record.ntpPrimary[kNtpCapacity - 1] == '\0' &&
          record.ntpSecondary[0] != '\0' && record.ntpSecondary[kNtpCapacity - 1] == '\0' &&
@@ -256,6 +319,10 @@ void RuntimeSettings::populateDefaults(Record &record,
   strncpy(record.ntpSecondary, "time.google.com", sizeof(record.ntpSecondary) - 1);
   strncpy(record.timeZoneRule, "AWST-8", sizeof(record.timeZoneRule) - 1);
   strncpy(record.timeZoneLabel, "AWST", sizeof(record.timeZoneLabel) - 1);
+  strncpy(record.cloudflareAccessClientId, defaults.cloudflareAccessClientId,
+          sizeof(record.cloudflareAccessClientId) - 1);
+  strncpy(record.cloudflareAccessClientSecret, defaults.cloudflareAccessClientSecret,
+          sizeof(record.cloudflareAccessClientSecret) - 1);
 }
 
 void RuntimeSettings::apply(const Record &record) {
@@ -264,14 +331,22 @@ void RuntimeSettings::apply(const Record &record) {
   memset(ntpSecondary_, 0, sizeof(ntpSecondary_));
   memset(timeZoneRule_, 0, sizeof(timeZoneRule_));
   memset(timeZoneLabel_, 0, sizeof(timeZoneLabel_));
+  memset(cloudflareAccessClientId_, 0, sizeof(cloudflareAccessClientId_));
+  memset(cloudflareAccessClientSecret_, 0, sizeof(cloudflareAccessClientSecret_));
   strncpy(mqttHost_, record.mqttHost, sizeof(mqttHost_) - 1);
   strncpy(ntpPrimary_, record.ntpPrimary, sizeof(ntpPrimary_) - 1);
   strncpy(ntpSecondary_, record.ntpSecondary, sizeof(ntpSecondary_) - 1);
   strncpy(timeZoneRule_, record.timeZoneRule, sizeof(timeZoneRule_) - 1);
   strncpy(timeZoneLabel_, record.timeZoneLabel, sizeof(timeZoneLabel_) - 1);
+  strncpy(cloudflareAccessClientId_, record.cloudflareAccessClientId,
+          sizeof(cloudflareAccessClientId_) - 1);
+  strncpy(cloudflareAccessClientSecret_, record.cloudflareAccessClientSecret,
+          sizeof(cloudflareAccessClientSecret_) - 1);
   uploadConfig_ = defaults_;
   uploadConfig_.mqttHost = mqttHost_;
   uploadConfig_.mqttPort = record.mqttPort;
+  uploadConfig_.cloudflareAccessClientId = cloudflareAccessClientId_;
+  uploadConfig_.cloudflareAccessClientSecret = cloudflareAccessClientSecret_;
   uploadEnabled_ = record.uploadEnabled != 0;
   remoteManagementEnabled_ = record.remoteManagementEnabled != 0;
   appliedConfigVersion_ = record.appliedConfigVersion;

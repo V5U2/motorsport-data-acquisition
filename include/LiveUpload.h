@@ -42,6 +42,8 @@ class LiveUpload {
   String storeForwardError() const;
   String pairingCode() const;
   uint32_t pairingCodeExpiresInSeconds() const;
+  String managementStatus() const;
+  String managementError() const;
   bool consumeRemoteConfig(RemoteConfig &config);
   void acknowledgeRemoteConfig(uint32_t version);
 
