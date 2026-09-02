@@ -476,6 +476,9 @@ bool LiveUpload::postHttps(const char *kind, const String &payload, String *resp
   HTTPClient http;
   http.setTimeout(kHttpsTimeoutMs);
   http.setReuse(true);
+  // Cloudflare's browser-integrity checks reject requests without a stable
+  // client signature before Access evaluates the service-token headers.
+  http.setUserAgent("ApexiLabs-Logger/1.0");
   String url = "https://" + String(config_.mqttHost);
   if (config_.mqttPort != 443) {
     url += ":" + String(config_.mqttPort);
