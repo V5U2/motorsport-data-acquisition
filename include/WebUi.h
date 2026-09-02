@@ -28,6 +28,7 @@ class WebUi {
  private:
   void registerRoutes();
   void handleIndex();
+  void handleDiagnostics();
   void handleLiveJson();
   void handleFilesJson();
   void handleSettings();
@@ -35,6 +36,7 @@ class WebUi {
   void handleDownload();
   String liveJson() const;
   String indexHtml() const;
+  String diagnosticsHtml() const;
   String sensorCardsHtml() const;
   bool settingsAuthorized();
   static String htmlEscape(const String &value);

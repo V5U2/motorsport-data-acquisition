@@ -161,7 +161,10 @@ Example live payload shape:
 
 ## Web endpoints
 The checked-in default is station mode. Create the ignored `include/AppSecrets.h` from the example and provide a 2.4 GHz SSID/password; `fast_connect`-style BSSID/channel pinning is not used, so the ESP8266 performs a normal network scan. If station association times out, firmware falls back to the open 2.4 GHz SoftAP `MDA-LOGGER` at `http://192.168.44.1` on channel 6. Set `AppConfig::kWifi.apPassword` to an 8+ character WPA2 key if a closed fallback AP is required.
-- `/` simple phone-friendly dashboard mirror
+- `/` compact phone-friendly sensor dashboard with a basic fault summary
+- `/diagnostics` detailed connectivity, hardware, storage, transport, and sensor diagnostics
 - `/api/live` current readings and system state as JSON
 - `/api/files` available CSV files on the SD card
 - `/download/<file>` fetch a CSV log file
+
+The dashboard sizes sensor cards to their readings instead of stretching them across the page. Use the **Diagnostics** action beside **Settings**, or the fault-finding card, to open the full system view. The CSV card is visibly disabled and does not poll the file API when microSD logging is disabled in the firmware.

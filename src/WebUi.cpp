@@ -98,6 +98,7 @@ void WebUi::setManagementPairingCode(const String &pairingCode,
 
 void WebUi::registerRoutes() {
   server_.on("/", HTTP_GET, [this]() { handleIndex(); });
+  server_.on("/diagnostics", HTTP_GET, [this]() { handleDiagnostics(); });
   server_.on("/api/live", HTTP_GET, [this]() { handleLiveJson(); });
   server_.on("/api/files", HTTP_GET, [this]() { handleFilesJson(); });
   server_.on("/settings", HTTP_GET, [this]() { handleSettings(); });
@@ -106,6 +107,10 @@ void WebUi::registerRoutes() {
 }
 
 void WebUi::handleIndex() { server_.send(200, "text/html", indexHtml()); }
+
+void WebUi::handleDiagnostics() {
+  server_.send(200, "text/html", diagnosticsHtml());
+}
 
 void WebUi::handleLiveJson() { server_.send(200, "application/json", liveJson()); }
 
@@ -124,7 +129,7 @@ void WebUi::handleSettings() {
 
   const AppConfig::UploadConfig &upload = settings_->uploadConfig();
   const bool httpsUpload = upload.protocol == AppConfig::UploadConfig::Protocol::Https;
-  String html = R"rawliteral(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Logger Settings</title><style>body{font-family:system-ui;max-width:38rem;margin:2rem auto;padding:0 1rem;background:#09131f;color:#ecf2f8}label{display:block;margin:1rem 0}.hint{color:#95a8ba}input{box-sizing:border-box;width:100%;padding:.7rem;margin-top:.3rem}input[type=checkbox]{width:auto}button{padding:.8rem 1.2rem}a{color:#6dd6ff}h2{margin-top:2rem}</style></head><body><h1>Device settings</h1><form method="post" action="/settings"><h2>Upstream server</h2>)rawliteral";
+  String html = R"rawliteral(<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>Logger Settings</title><style>body{font-family:system-ui;max-width:38rem;margin:2rem auto;padding:0 1rem;background:#09131f;color:#ecf2f8}label{display:block;margin:1rem 0}.hint{color:#95a8ba}input{box-sizing:border-box;width:100%;padding:.7rem;margin-top:.3rem}input[type=checkbox]{width:auto}button{padding:.8rem 1.2rem}a{color:#6dd6ff}h2{margin-top:2rem}</style></head><body><h1>Device settings</h1><form method="post" action="/settings"><h2>Upstream server</h2>)rawliteral";
   html += httpsUpload
               ? R"rawliteral(<p class="hint">HTTPS through Cloudflare Access. Credentials may be compiled into the firmware or replaced below. Stored values are never returned by this page.</p>)rawliteral"
               : R"rawliteral(<p class="hint">MQTT credentials remain in the local secrets header and are never returned by this page.</p>)rawliteral";
@@ -371,6 +376,7 @@ String WebUi::indexHtml() const {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>Motorsport Logger</title>
   <style>
     :root { --bg:#09131f; --surface:#111d2a; --border:#29394a; --text:#ecf2f8; --muted:#95a8ba; --accent:#6dd6ff; --ok:#73d5a2; --warn:#f4c46c; --bad:#ff8d8d; }
@@ -379,76 +385,60 @@ String WebUi::indexHtml() const {
     header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px; background:#102235; border-bottom:1px solid var(--border); }
     h1 { margin: 0; font-size: 1.4rem; }
     .header-meta { margin-top:4px; color:var(--muted); font-size:.88rem; }
-    .settings-link { flex:none; padding:9px 12px; border:1px solid var(--border); border-radius:8px; text-decoration:none; }
-    .grid { display: grid; gap: 16px; padding: 16px; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); }
-    .card { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .actions { display:flex; gap:8px; }
+    .action-link { flex:none; padding:9px 12px; border:1px solid var(--border); border-radius:8px; color:var(--text); text-decoration:none; }
+    main { width:min(100%, 72rem); margin:0 auto; padding:16px; }
+    .sensor-grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit, minmax(180px, 240px)); }
+    .support-grid { display:grid; gap:12px; margin-top:12px; grid-template-columns:repeat(2, minmax(0, 1fr)); }
+    .card { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:14px; }
+    .sensor-card { min-height:116px; }
     .label { color:var(--muted); font-size:.78rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-    .value { font-size:2.2rem; margin-top:6px; }
+    .value { font-size:1.8rem; margin-top:6px; }
     .status { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-top:11px; font-size:.94rem; }
     .status > :last-child { min-width:0; text-align:right; }
-    .detail-row { display:block; padding-top:11px; border-top:1px solid rgba(149,168,186,.16); }
-    .detail-row span { display:block; }
-    .detail-row span:last-child { margin-top:4px; color:var(--text); text-align:left; overflow-wrap:anywhere; }
     .state { font-size:.78rem; font-weight:700; letter-spacing:.04em; }
     .state.ok { color:var(--ok); }
     .state.warn { color:var(--warn); }
     .state.bad { color:var(--bad); }
-    .diagnostic { color:var(--muted); overflow-wrap:anywhere; }
-    ul { margin-bottom:0; padding-left:18px; }
+    .summary { margin:10px 0 0; color:var(--muted); line-height:1.45; }
+    .card-link { display:inline-block; margin-top:12px; }
+    .disabled { opacity:.52; }
+    .disabled .card-link { color:var(--muted); pointer-events:none; text-decoration:none; }
+    ul { margin:10px 0 0; padding-left:18px; }
     li + li { margin-top:8px; }
     a { color:var(--accent); }
     a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
-    @media (max-width:560px) { header { padding:16px; } .grid { padding:12px; gap:12px; grid-template-columns:1fr; } }
+    @media (max-width:620px) { header { padding:16px; flex-direction:column; } .actions { flex-direction:row; } main { padding:12px; } .sensor-grid,.support-grid { grid-template-columns:1fr; } }
   </style>
 </head>
 <body>
   <header>
     <div><h1>Motorsport Sensor Logger</h1><div class="header-meta" id="stamp">Waiting for data...</div></div>
-    <a class="settings-link" href="/settings">Settings</a>
+    <nav class="actions" aria-label="Logger pages"><a class="action-link" href="/diagnostics">Diagnostics</a><a class="action-link" href="/settings">Settings</a></nav>
   </header>
-  <section class="grid">
+  <main>
+    <section class="sensor-grid" aria-label="Sensor readings">
 )rawliteral";
 
   const String htmlEnd = R"rawliteral(
-    <div class="card">
-      <div class="label">Connectivity</div>
-      <div class="status"><span>Server</span><span class="state" id="uploadStatus">--</span></div>
-      <div class="status"><span>Protocol</span><span id="uploadProtocol">--</span></div>
-      <div class="status"><span>Wi-Fi</span><span id="wifiStatus">--</span></div>
-      <div class="status"><span>Remote management</span><span class="state" id="remoteManagementStatus">--</span></div>
-      <div class="status"><span>Applied configuration</span><span id="configVersion">--</span></div>
-      <div class="status detail-row"><span>Upstream endpoint</span><span id="uploadServer">--</span></div>
-    </div>
-    <div class="card">
-      <div class="label">Hardware</div>
-      <div class="status"><span>ADC</span><span class="state" id="adcStatus">--</span></div>
-      <div class="status"><span>RTC</span><span class="state" id="rtcStatus">--</span></div>
-      <div class="status"><span>Last time sync</span><span id="rtcLastSync">--</span></div>
-      <div class="status"><span>OTA updates</span><span class="state" id="otaStatus">--</span></div>
-    </div>
-    <div class="card">
-      <div class="label">Storage</div>
-      <div class="status"><span>Onboard queue</span><span id="queueStatus">--</span></div>
-      <div class="status"><span>Dropped records</span><span id="queueDropped">--</span></div>
-      <div class="status"><span>SD logging</span><span class="state" id="sdStatus">--</span></div>
-      <div class="status detail-row"><span>Current log file</span><span id="logFile">--</span></div>
-    </div>
-    <div class="card">
-      <div class="label">Diagnostics</div>
-      <div class="status detail-row"><span>Upload session</span><span class="diagnostic" id="uploadSession">--</span></div>
-      <div class="status"><span>Upload sequence</span><span id="uploadSequence">--</span></div>
-      <div class="status detail-row"><span>Upload</span><span class="diagnostic" id="uploadError">No errors</span></div>
-      <div class="status detail-row"><span>Remote management</span><span class="diagnostic" id="remoteManagementError">No errors</span></div>
-      <div class="status detail-row"><span>Queue</span><span class="diagnostic" id="queueError">No errors</span></div>
-      <div class="status detail-row"><span>RTC</span><span class="diagnostic" id="rtcError">No errors</span></div>
-      <div class="status detail-row"><span>Logging</span><span class="diagnostic" id="logError">No errors</span></div>
-    </div>
-    <div class="card">
+    </section>
+    <section class="support-grid" aria-label="Logger status">
+      <div class="card" id="healthCard">
+        <div class="label">Fault finding</div>
+        <div class="status"><span>Logger health</span><span class="state" id="healthStatus">CHECKING</span></div>
+        <p class="summary" id="healthSummary">Checking sensors and logger systems...</p>
+        <a class="card-link" href="/diagnostics">View full diagnostics</a>
+      </div>
+      <div class="card" id="csvCard">
       <div class="label">CSV Files</div>
+      <p class="summary" id="csvSummary">Checking microSD logging...</p>
       <ul id="fileList"></ul>
-    </div>
-  </section>
+      </div>
+    </section>
+  </main>
   <script>
+    let csvFilesEnabled = false;
+
     function setState(id, text, tone) {
       const target = document.getElementById(id);
       target.textContent = text;
@@ -462,38 +452,50 @@ String WebUi::indexHtml() const {
       data.sensors.forEach((sensor) => {
         document.getElementById('sensor-value-' + sensor.id).textContent = sensor.value.toFixed(1) + ' ' + sensor.units;
         document.getElementById('sensor-loop-' + sensor.id).textContent = sensor.loop_mA.toFixed(2) + ' mA';
-        document.getElementById('sensor-fault-' + sensor.id).textContent = sensor.fault;
+        const fault = document.getElementById('sensor-fault-' + sensor.id);
+        fault.textContent = sensor.fault === 'none' ? 'OK' : sensor.fault.toUpperCase();
+        fault.className = 'state ' + (sensor.fault === 'none' ? 'ok' : 'bad');
       });
-      setState('adcStatus', data.system.adc_ready ? 'READY' : 'FAULT', data.system.adc_ready ? 'ok' : 'bad');
-      const rtcText = data.system.rtc_enabled ? (data.system.rtc_ready ? (data.system.rtc_synced ? 'NTP SYNCED' : 'HOLDOVER') : 'FAULT') : 'DISABLED';
-      setState('rtcStatus', rtcText, rtcText === 'FAULT' ? 'bad' : (rtcText === 'NTP SYNCED' ? 'ok' : 'warn'));
-      document.getElementById('rtcLastSync').textContent = data.system.rtc_last_sync || '--';
-      const sdText = data.system.sd_enabled ? (data.system.sd_ready ? 'READY' : 'FAULT') : 'DISABLED';
-      setState('sdStatus', sdText, sdText === 'FAULT' ? 'bad' : (sdText === 'READY' ? 'ok' : ''));
-      const uploadText = data.system.upload_enabled ? (data.system.upload_connected ? 'CONNECTED' : 'WAITING') : 'DISABLED';
-      setState('uploadStatus', uploadText, uploadText === 'CONNECTED' ? 'ok' : (uploadText === 'WAITING' ? 'warn' : ''));
-      document.getElementById('uploadProtocol').textContent = data.system.upload_protocol.toUpperCase();
-      document.getElementById('uploadServer').textContent = data.system.upload_server || 'Not configured';
-      const remoteText = data.system.remote_management_enabled ? 'ENABLED' : 'DISABLED';
-      setState('remoteManagementStatus', remoteText, data.system.remote_management_enabled ? 'ok' : '');
-      document.getElementById('configVersion').textContent = 'v' + data.system.applied_config_version + ' ' + (data.system.remote_management_status || 'ready');
-      document.getElementById('queueStatus').textContent = data.system.store_forward_enabled
-        ? (data.system.store_forward_ready
-          ? data.system.store_forward_pending_records + ' pending / ' + Math.round(data.system.store_forward_pending_bytes / 1024) + ' KiB'
-          : 'FAULT')
-        : 'DISABLED';
-      document.getElementById('queueDropped').textContent = data.system.store_forward_dropped_records;
-      const otaText = data.system.ota_enabled ? (data.system.ota_ready ? 'READY' : 'LOCKED') : 'DISABLED';
-      setState('otaStatus', otaText, otaText === 'READY' ? 'ok' : (otaText === 'LOCKED' ? 'warn' : ''));
-      document.getElementById('wifiStatus').textContent = data.system.wifi_mode + ' ' + data.system.ip_address;
-      document.getElementById('logFile').textContent = data.system.current_log_file || '--';
-      document.getElementById('uploadSession').textContent = data.system.upload_session_id || '--';
-      document.getElementById('uploadSequence').textContent = data.system.upload_sequence;
-      document.getElementById('uploadError').textContent = data.system.last_upload_error || 'No errors';
-      document.getElementById('remoteManagementError').textContent = data.system.remote_management_error || 'No errors';
-      document.getElementById('queueError').textContent = data.system.store_forward_error || 'No errors';
-      document.getElementById('rtcError').textContent = data.system.rtc_error || 'No errors';
-      document.getElementById('logError').textContent = data.system.last_log_error || 'No errors';
+      const issues = [];
+      data.sensors.forEach((sensor) => { if (sensor.fault !== 'none') issues.push(sensor.name + ': ' + sensor.fault); });
+      if (!data.system.adc_ready) issues.push('ADC is not ready');
+      if (data.system.rtc_enabled && !data.system.rtc_ready) issues.push('RTC: ' + (data.system.rtc_error || 'not ready'));
+      else if (data.system.rtc_enabled && data.system.rtc_error) issues.push('RTC: ' + data.system.rtc_error);
+      if (data.system.sd_enabled && !data.system.sd_ready) issues.push('Logging: ' + (data.system.last_log_error || 'microSD is not ready'));
+      else if (data.system.sd_enabled && data.system.last_log_error) issues.push('Logging: ' + data.system.last_log_error);
+      if (data.system.upload_enabled && !data.system.upload_connected) issues.push('Upload: ' + (data.system.last_upload_error || 'upstream server is not connected'));
+      else if (data.system.last_upload_error) issues.push('Upload: ' + data.system.last_upload_error);
+      if (data.system.remote_management_error) issues.push('Remote management: ' + data.system.remote_management_error);
+      if (data.system.store_forward_enabled && !data.system.store_forward_ready) issues.push('Queue: ' + (data.system.store_forward_error || 'not ready'));
+      else if (data.system.store_forward_error) issues.push('Queue: ' + data.system.store_forward_error);
+      if (issues.length) {
+        setState('healthStatus', issues.length + ' ISSUE' + (issues.length === 1 ? '' : 'S'), 'bad');
+        document.getElementById('healthSummary').textContent = issues.slice(0, 2).join('. ') + (issues.length > 2 ? '. View diagnostics for more.' : '.');
+      } else {
+        setState('healthStatus', 'NOMINAL', 'ok');
+        document.getElementById('healthSummary').textContent = 'Sensors and enabled logger systems are operating normally.';
+      }
+      const csvCard = document.getElementById('csvCard');
+      const csvSummary = document.getElementById('csvSummary');
+      if (!data.system.sd_enabled) {
+        csvFilesEnabled = false;
+        csvCard.classList.add('disabled');
+        csvCard.setAttribute('aria-disabled', 'true');
+        csvSummary.textContent = 'MicroSD logging is disabled in this firmware.';
+        document.getElementById('fileList').innerHTML = '';
+      } else if (!data.system.sd_ready) {
+        csvFilesEnabled = false;
+        csvCard.classList.remove('disabled');
+        csvCard.removeAttribute('aria-disabled');
+        csvSummary.textContent = 'MicroSD logging is enabled but the card is not ready.';
+      } else {
+        const shouldLoadFiles = !csvFilesEnabled;
+        csvFilesEnabled = true;
+        csvCard.classList.remove('disabled');
+        csvCard.removeAttribute('aria-disabled');
+        csvSummary.textContent = 'Download logs stored on the microSD card.';
+        if (shouldLoadFiles) refreshFiles();
+      }
     }
 
     async function refreshFiles() {
@@ -526,13 +528,79 @@ String WebUi::indexHtml() const {
     }
 
     refreshLiveSafely();
-    refreshFiles().catch(() => {});
     setInterval(refreshLiveSafely, 1000);
-    setInterval(() => refreshFiles().catch(() => {}), 10000);
+    setInterval(() => { if (csvFilesEnabled) refreshFiles().catch(() => {}); }, 10000);
   </script>
 </body>
 </html>
 )rawliteral";
 
   return htmlStart + sensorCardsHtml() + htmlEnd;
+}
+
+String WebUi::diagnosticsHtml() const {
+  return R"rawliteral(
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
+  <title>Logger Diagnostics</title>
+  <style>
+    :root { --bg:#09131f; --surface:#111d2a; --border:#29394a; --text:#ecf2f8; --muted:#95a8ba; --accent:#6dd6ff; --ok:#73d5a2; --warn:#f4c46c; --bad:#ff8d8d; }
+    * { box-sizing:border-box; }
+    body { margin:0; font-family:"Segoe UI",system-ui,sans-serif; background:var(--bg); color:var(--text); }
+    header { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; padding:18px 20px; background:#102235; border-bottom:1px solid var(--border); }
+    h1 { margin:0; font-size:1.4rem; }
+    .header-meta { margin-top:4px; color:var(--muted); font-size:.88rem; }
+    .actions { display:flex; gap:8px; }
+    .action-link { padding:9px 12px; border:1px solid var(--border); border-radius:8px; color:var(--text); text-decoration:none; }
+    main { width:min(100%,72rem); margin:0 auto; padding:16px; }
+    .grid { display:grid; gap:12px; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); }
+    .card { min-width:0; background:var(--surface); border:1px solid var(--border); border-radius:12px; padding:16px; }
+    .label { color:var(--muted); font-size:.78rem; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+    .status { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-top:11px; font-size:.94rem; }
+    .status > :last-child { min-width:0; text-align:right; overflow-wrap:anywhere; }
+    .detail-row { display:block; padding-top:11px; border-top:1px solid rgba(149,168,186,.16); }
+    .detail-row span { display:block; }
+    .detail-row span:last-child { margin-top:4px; color:var(--text); text-align:left; }
+    .state { font-size:.78rem; font-weight:700; letter-spacing:.04em; }
+    .state.ok { color:var(--ok); } .state.warn { color:var(--warn); } .state.bad { color:var(--bad); }
+    a { color:var(--accent); } a:focus-visible { outline:2px solid var(--accent); outline-offset:3px; }
+    @media(max-width:620px) { header { padding:16px; flex-direction:column; } .actions { flex-direction:row; } main { padding:12px; } .grid { grid-template-columns:1fr; } }
+  </style>
+</head>
+<body>
+  <header><div><h1>Logger Diagnostics</h1><div class="header-meta" id="stamp">Waiting for data...</div></div><nav class="actions" aria-label="Logger pages"><a class="action-link" href="/">Dashboard</a><a class="action-link" href="/settings">Settings</a></nav></header>
+  <main><section class="grid">
+    <div class="card"><div class="label">Connectivity</div><div class="status"><span>Server</span><span class="state" id="uploadStatus">--</span></div><div class="status"><span>Protocol</span><span id="uploadProtocol">--</span></div><div class="status"><span>Wi-Fi</span><span id="wifiStatus">--</span></div><div class="status"><span>Remote management</span><span class="state" id="remoteManagementStatus">--</span></div><div class="status"><span>Applied configuration</span><span id="configVersion">--</span></div><div class="status detail-row"><span>Upstream endpoint</span><span id="uploadServer">--</span></div></div>
+    <div class="card"><div class="label">Hardware &amp; time</div><div class="status"><span>ADC</span><span class="state" id="adcStatus">--</span></div><div class="status"><span>RTC</span><span class="state" id="rtcStatus">--</span></div><div class="status"><span>Last time sync</span><span id="rtcLastSync">--</span></div><div class="status"><span>OTA updates</span><span class="state" id="otaStatus">--</span></div></div>
+    <div class="card"><div class="label">Storage</div><div class="status"><span>Onboard queue</span><span id="queueStatus">--</span></div><div class="status"><span>Queue capacity</span><span id="queueCapacity">--</span></div><div class="status"><span>Dropped records</span><span id="queueDropped">--</span></div><div class="status"><span>SD logging</span><span class="state" id="sdStatus">--</span></div><div class="status detail-row"><span>Current log file</span><span id="logFile">--</span></div></div>
+    <div class="card"><div class="label">Transport</div><div class="status detail-row"><span>Upload session</span><span id="uploadSession">--</span></div><div class="status"><span>Upload sequence</span><span id="uploadSequence">--</span></div><div class="status detail-row"><span>Upload error</span><span id="uploadError">No errors</span></div><div class="status detail-row"><span>Remote-management error</span><span id="remoteManagementError">No errors</span></div></div>
+    <div class="card"><div class="label">Hardware errors</div><div class="status detail-row"><span>Queue</span><span id="queueError">No errors</span></div><div class="status detail-row"><span>RTC</span><span id="rtcError">No errors</span></div><div class="status detail-row"><span>Logging</span><span id="logError">No errors</span></div></div>
+    <div class="card"><div class="label">Sensors</div><div id="sensorDiagnostics">--</div></div>
+  </section></main>
+  <script>
+    function text(id,value){document.getElementById(id).textContent=value;}
+    function state(id,value,tone){const el=document.getElementById(id);el.textContent=value;el.className='state'+(tone?' '+tone:'');}
+    async function refresh(){
+      const response=await fetch('/api/live'); const data=await response.json();
+      text('stamp',data.timestamp+' '+data.system.time_zone+' | uptime '+data.uptime);
+      const upload=data.system.upload_enabled?(data.system.upload_connected?'CONNECTED':'WAITING'):'DISABLED'; state('uploadStatus',upload,upload==='CONNECTED'?'ok':(upload==='WAITING'?'warn':''));
+      text('uploadProtocol',data.system.upload_protocol.toUpperCase()); text('wifiStatus',data.system.wifi_mode+' '+data.system.ip_address); text('uploadServer',data.system.upload_server||'Not configured');
+      state('remoteManagementStatus',data.system.remote_management_enabled?'ENABLED':'DISABLED',data.system.remote_management_enabled?'ok':''); text('configVersion','v'+data.system.applied_config_version+' '+(data.system.remote_management_status||'ready'));
+      state('adcStatus',data.system.adc_ready?'READY':'FAULT',data.system.adc_ready?'ok':'bad');
+      const rtc=data.system.rtc_enabled?(data.system.rtc_ready?(data.system.rtc_synced?'NTP SYNCED':'HOLDOVER'):'FAULT'):'DISABLED'; state('rtcStatus',rtc,rtc==='FAULT'?'bad':(rtc==='NTP SYNCED'?'ok':'warn')); text('rtcLastSync',data.system.rtc_last_sync||'--');
+      const ota=data.system.ota_enabled?(data.system.ota_ready?'READY':'LOCKED'):'DISABLED'; state('otaStatus',ota,ota==='READY'?'ok':(ota==='LOCKED'?'warn':''));
+      text('queueStatus',data.system.store_forward_enabled?(data.system.store_forward_ready?data.system.store_forward_pending_records+' pending / '+Math.round(data.system.store_forward_pending_bytes/1024)+' KiB':'FAULT'):'DISABLED'); text('queueCapacity',Math.round(data.system.store_forward_capacity_bytes/1024)+' KiB'); text('queueDropped',data.system.store_forward_dropped_records);
+      const sd=data.system.sd_enabled?(data.system.sd_ready?'READY':'FAULT'):'DISABLED'; state('sdStatus',sd,sd==='READY'?'ok':(sd==='FAULT'?'bad':'')); text('logFile',data.system.current_log_file||'--');
+      text('uploadSession',data.system.upload_session_id||'--'); text('uploadSequence',data.system.upload_sequence); text('uploadError',data.system.last_upload_error||'No errors'); text('remoteManagementError',data.system.remote_management_error||'No errors'); text('queueError',data.system.store_forward_error||'No errors'); text('rtcError',data.system.rtc_error||'No errors'); text('logError',data.system.last_log_error||'No errors');
+      const sensors=document.getElementById('sensorDiagnostics'); sensors.innerHTML=''; data.sensors.forEach((sensor)=>{const row=document.createElement('div');row.className='status';const name=document.createElement('span');name.textContent=sensor.name+' ('+sensor.loop_mA.toFixed(2)+' mA)';const fault=document.createElement('span');fault.className='state '+(sensor.fault==='none'?'ok':'bad');fault.textContent=sensor.fault==='none'?'OK':sensor.fault.toUpperCase();row.append(name,fault);sensors.appendChild(row);});
+    }
+    async function refreshSafely(){try{await refresh();}catch(error){text('stamp','Diagnostics refresh failed');}}
+    refreshSafely(); setInterval(refreshSafely,1000);
+  </script>
+</body></html>
+)rawliteral";
 }
