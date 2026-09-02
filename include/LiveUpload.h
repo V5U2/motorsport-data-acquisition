@@ -12,6 +12,7 @@
 
 #include "AppConfig.h"
 #include "RemoteConfig.h"
+#include "StoreForwardQueue.h"
 #include "Types.h"
 
 class LiveUpload {
@@ -32,6 +33,13 @@ class LiveUpload {
   String sessionId() const;
   String lastError() const;
   uint32_t lastSequence() const;
+  bool storeForwardEnabled() const;
+  bool storeForwardReady() const;
+  uint32_t storeForwardPendingRecords() const;
+  size_t storeForwardPendingBytes() const;
+  size_t storeForwardCapacityBytes() const;
+  uint32_t storeForwardDroppedRecords() const;
+  String storeForwardError() const;
   String pairingCode() const;
   uint32_t pairingCodeExpiresInSeconds() const;
   bool consumeRemoteConfig(RemoteConfig &config);
@@ -42,6 +50,8 @@ class LiveUpload {
   void publishOfflineStatusAndDisconnect();
   bool publishStatus(bool connected);
   bool publishSnapshot(const AppState &state);
+  bool queueSnapshot(const AppState &state);
+  bool replayQueuedSnapshot();
   bool postHttps(const char *kind, const String &payload, String *responseBody = nullptr);
   void consumeHttpsDesiredConfig(const String &responseBody);
   void handleMqttMessage(char *topic, uint8_t *payload, unsigned int length);
@@ -82,4 +92,7 @@ class LiveUpload {
   RemoteConfig pendingRemoteConfig_{};
   bool hasPendingRemoteConfig_ = false;
   bool httpsConnected_ = false;
+  int lastHttpStatus_ = 0;
+  bool lastPostRetryable_ = false;
+  StoreForwardQueue storeForwardQueue_;
 };

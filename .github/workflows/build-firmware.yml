@@ -40,15 +40,27 @@ jobs:
       - name: Run full repo verification
         run: ./scripts/verify-repo.sh --full
 
+      - name: Build ESP32 firmware
+        run: pio run -e esp32dev
+
       - name: Prepare firmware artifacts
         run: |
           mkdir -p dist
           cp .pio/build/nodemcuv2/firmware.bin dist/motorsport-data-acquisition-nodemcuv2-firmware.bin
           cp .pio/build/nodemcuv2/firmware.elf dist/motorsport-data-acquisition-nodemcuv2-firmware.elf
+          cp .pio/build/esp32dev/firmware.bin dist/motorsport-data-acquisition-esp32dev-firmware.bin
+          cp .pio/build/esp32dev/firmware.elf dist/motorsport-data-acquisition-esp32dev-firmware.elf
+          python ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32 merge_bin \
+            --output dist/motorsport-data-acquisition-esp32dev-factory.bin \
+            --flash_mode dio --flash_freq 40m --flash_size 16MB \
+            0x1000 .pio/build/esp32dev/bootloader.bin \
+            0x8000 .pio/build/esp32dev/partitions.bin \
+            0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
+            0x10000 .pio/build/esp32dev/firmware.bin
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: firmware-nodemcuv2
+          name: firmware-nodemcuv2-and-esp32dev
           path: dist/*
           if-no-files-found: error

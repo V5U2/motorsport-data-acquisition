@@ -49,6 +49,13 @@ struct SystemStatus {
   String uploadSessionId;
   String lastUploadError;
   uint32_t lastUploadSequence;
+  bool storeForwardEnabled;
+  bool storeForwardReady;
+  uint32_t storeForwardPendingRecords;
+  size_t storeForwardPendingBytes;
+  size_t storeForwardCapacityBytes;
+  uint32_t storeForwardDroppedRecords;
+  String storeForwardError;
 };
 
 struct AppState {

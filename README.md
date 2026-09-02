@@ -1,6 +1,6 @@
 # Motorsport Data Acquisition
 
-ESP8266 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and dashboard, targeting the NodeMCU 1.0 / ESP-12E DevKit V2.
+Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and dashboard, targeting classic ESP32 DevKit/WROOM-class boards and the NodeMCU 1.0 / ESP-12E DevKit V2.
 
 ## Features
 - Reads a configurable set of 4-20 mA sensors through an ADS1115-based analog front end
@@ -8,6 +8,7 @@ ESP8266 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger
 - Logs CSV data to microSD with RTC timestamps when RTC hardware is fitted
 - Serves a lightweight Wi-Fi dashboard and CSV download endpoints
 - Publishes live telemetry over MQTT or authenticated HTTPS when station Wi-Fi and upstream settings are configured
+- Buffers retryable HTTPS failures in a persistent circular onboard-flash queue on the 16 MB ESP32 target and replays them oldest-first after recovery
 - Lights the NodeMCU built-in LED steadily once firmware setup begins
 - Keeps pin mapping, sensor calibration, and refresh rates in one config file
 - Synchronises the RV-3028 from NTP at every networked boot and hourly thereafter, while retaining RTC holdover when offline
@@ -66,7 +67,7 @@ The default clock configuration uses `pool.ntp.org`, `time.google.com`, POSIX ti
 
 Dashboard uptime is displayed as `DD:HH:mm:ss`. The live API retains numeric `uptime_ms` for compatibility and also exposes the formatted value as `uptime`.
 
-The NodeMCU target has 4 MB onboard flash using the `eagle.flash.4m1m.ld` layout, which reserves 1 MB for a filesystem in addition to the small EEPROM-emulation record used here. The filesystem remains available for future queues or configuration artifacts; durable telemetry continues to belong on microSD to avoid unnecessary flash wear.
+The ESP32 target uses the checked-in 16 MB partition table: two 2 MB OTA application slots plus an approximately 12 MB LittleFS partition. Store-and-forward is capped at 10 MB and split across two append-only segments; when capacity is exhausted, rotation drops the oldest remaining segment and reports the drop count. Only failed HTTPS snapshots are written, limiting flash wear during normal connected operation. The NodeMCU target keeps its existing 4 MB layout and does not enable this queue.
 
 Production brokers require authentication. Set `APEXI_MQTT_USERNAME` to the same normalized value as `kLiveUpload.deviceId`; the broker ACL uses that identity to limit the device to publishing `<topicPrefix>/<deviceId>/live` and `<topicPrefix>/<deviceId>/status`. When remote management is enabled, it may additionally read only its own `<topicPrefix>/<deviceId>/config/desired` topic. Keep the matching password in the encrypted infrastructure vault and never commit `AppSecrets.h`.
 
@@ -75,7 +76,8 @@ Current behavior:
 - Each message includes `schema_version`, a normalized `device_id`, a per-boot `session_id`, a monotonic `sequence`, the current timestamp, and the current sensor values.
 - The retained MQTT status topic now reflects both online and offline state so downstream consumers do not keep stale liveness.
 - The firmware exposes live upload state through the local web UI and `/api/live`.
-- Local SD logging remains the durable on-device record when SD logging is enabled.
+- The ESP32 local UI exposes onboard queue readiness, pending records/bytes, drops, and queue errors.
+- Local SD logging remains optional for long-duration/removable CSV archives.
 
 ### Starting and stopping a live session
 
@@ -91,30 +93,29 @@ Powering down, losing Wi-Fi, or losing MQTT marks the stream offline through ret
 
 Current limits:
 - MQTT and Access-authenticated HTTPS emit the same versioned live/status payloads.
-- HTTP backlog upload and store-and-forward replay are not implemented yet.
-- For motorsport use with spotty connectivity, the intended next step is an HTTP batch uploader that drains unsent SD log segments after connectivity returns.
+- ESP32 store-and-forward currently replays individual snapshots through the compatibility endpoint; server-side batch ingest remains a future throughput optimization.
 
 Mermaid overview:
 
 ```mermaid
 flowchart LR
-    A["4-20 mA Sensors"] --> B["ESP8266 Firmware"]
+    A["4-20 mA Sensors"] --> B["ESP32 / ESP8266 Firmware"]
     B --> C["ADS1115 Sampling"]
     C --> D["App State"]
     D --> E["TFT Dashboard (Optional)"]
     D --> F["Web UI / Local API"]
     D --> G["CSV Logger (Optional SD)"]
-    D --> H["MQTT Live Upload"]
-    H --> I["MQTT Broker"]
-    I --> J["Realtime Dashboards / Alerts / Stream Processing"]
-    G --> K["HTTP Backlog Upload (Planned)"]
-    K --> L["Server-side Session Store / Analytics"]
+    D --> H["MQTT / HTTPS Live Upload"]
+    H --> I["Gateway / App Ingest"]
+    D --> K["ESP32 Onboard Failure Queue"]
+    K --> H
+    I --> J["Realtime Dashboards / Analytics"]
 ```
 
 Recommended configuration model:
-- Use MQTT for low-latency live telemetry.
-- Keep SD logging enabled when durable local recovery matters.
-- Add a later HTTP backlog uploader for reliable store-and-forward of missed samples.
+- Use authenticated HTTPS on the ESP32 when Cloudflare Access ingress is required.
+- Use the onboard queue for transient connectivity recovery.
+- Keep SD logging enabled only when long-term removable CSV archives are required.
 
 Default MQTT topic layout:
 - `<topicPrefix>/<deviceId>/live`
@@ -134,7 +135,7 @@ Example live payload shape:
   "device_id": "mda-logger",
   "session_id": "mda-logger-boot-42",
   "sequence": 12,
-  "timestamp": "2026-04-05 10:15:30",
+  "timestamp": "2026-04-05T02:15:30Z",
   "uptime_ms": 15234,
   "sensors": [
     {

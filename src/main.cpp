@@ -135,6 +135,13 @@ AppState buildState() {
   state.system.uploadSessionId = liveUpload.sessionId();
   state.system.lastUploadError = liveUpload.lastError();
   state.system.lastUploadSequence = liveUpload.lastSequence();
+  state.system.storeForwardEnabled = liveUpload.storeForwardEnabled();
+  state.system.storeForwardReady = liveUpload.storeForwardReady();
+  state.system.storeForwardPendingRecords = liveUpload.storeForwardPendingRecords();
+  state.system.storeForwardPendingBytes = liveUpload.storeForwardPendingBytes();
+  state.system.storeForwardCapacityBytes = liveUpload.storeForwardCapacityBytes();
+  state.system.storeForwardDroppedRecords = liveUpload.storeForwardDroppedRecords();
+  state.system.storeForwardError = liveUpload.storeForwardError();
   return state;
 }
 
@@ -266,6 +273,12 @@ void setup() {
                    runtimeSettings.liveUploadEnabled(),
                    runtimeSettings.remoteManagementEnabled(),
                    runtimeSettings.appliedConfigVersion());
+  Serial.print("storeForwardReady=");
+  Serial.print(liveUpload.storeForwardReady() ? "1" : "0");
+  Serial.print(" pending=");
+  Serial.print(liveUpload.storeForwardPendingRecords());
+  Serial.print(" capacityBytes=");
+  Serial.println(liveUpload.storeForwardCapacityBytes());
   webUi.setManagementPairingCode(liveUpload.pairingCode(),
                                  liveUpload.pairingCodeExpiresInSeconds());
   Serial.print("wifiReady=");

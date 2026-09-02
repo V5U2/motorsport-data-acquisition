@@ -74,6 +74,14 @@ bool intervalElapsed(const uint32_t nowMs,
   return static_cast<uint32_t>(nowMs - previousMs) >= intervalMs;
 }
 
+bool isRetryableHttpStatus(const int status) {
+  return status < 0 || status == 408 || status == 425 || status == 429 || status >= 500;
+}
+
+bool shouldDiscardQueuedHttpStatus(const int status) {
+  return status == 400 || status == 404 || status == 413 || status == 422;
+}
+
 std::string fallbackTimestamp(const uint32_t uptimeMs) {
   return "boot+" + std::to_string(uptimeMs);
 }

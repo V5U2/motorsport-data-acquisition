@@ -129,6 +129,11 @@ struct UploadConfig {
   const char *appDeviceToken;
 };
 
+struct StoreForwardConfig {
+  bool enabled;
+  size_t maximumBytes;
+};
+
 struct RtcConfig {
   RtcKind kind;
   uint8_t address;
@@ -229,7 +234,11 @@ inline constexpr WifiConfig kWifi{
 inline constexpr FeatureConfig kFeatures{
     false,
     true,
+#if defined(ESP32)
+    false,
+#else
     true,
+#endif
     true,
     true,
 };
@@ -254,6 +263,12 @@ inline constexpr UploadConfig kLiveUpload{
     APEXI_CF_ACCESS_CLIENT_SECRET,
     APEXI_APP_DEVICE_TOKEN,
 };
+
+#if defined(ESP32)
+inline constexpr StoreForwardConfig kStoreForward{true, 10UL * 1024UL * 1024UL};
+#else
+inline constexpr StoreForwardConfig kStoreForward{false, 0};
+#endif
 
 inline constexpr DisplayConfig kDisplay{
     1,

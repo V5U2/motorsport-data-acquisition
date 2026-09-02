@@ -309,6 +309,19 @@ String WebUi::liveJson() const {
   json += "\"upload_server\":\"" + jsonEscape(state_.system.uploadServer) + "\",";
   json += "\"upload_session_id\":\"" + state_.system.uploadSessionId + "\",";
   json += "\"upload_sequence\":" + String(state_.system.lastUploadSequence) + ",";
+  json += "\"store_forward_enabled\":" +
+          String(state_.system.storeForwardEnabled ? "true" : "false") + ",";
+  json += "\"store_forward_ready\":" +
+          String(state_.system.storeForwardReady ? "true" : "false") + ",";
+  json += "\"store_forward_pending_records\":" +
+          String(state_.system.storeForwardPendingRecords) + ",";
+  json += "\"store_forward_pending_bytes\":" +
+          String(state_.system.storeForwardPendingBytes) + ",";
+  json += "\"store_forward_capacity_bytes\":" +
+          String(state_.system.storeForwardCapacityBytes) + ",";
+  json += "\"store_forward_dropped_records\":" +
+          String(state_.system.storeForwardDroppedRecords) + ",";
+  json += "\"store_forward_error\":\"" + jsonEscape(state_.system.storeForwardError) + "\",";
   json += "\"last_upload_error\":\"" + jsonEscape(state_.system.lastUploadError) + "\"}}";
   return json;
 }
@@ -365,6 +378,7 @@ String WebUi::indexHtml() const {
       <div class="status"><span>SD</span><span id="sdStatus">--</span></div>
       <div class="status"><span>Upload</span><span id="uploadStatus">--</span></div>
       <div class="status"><span>Server</span><span id="uploadServer">--</span></div>
+      <div class="status"><span>Onboard queue</span><span id="queueStatus">--</span></div>
       <div class="status"><span>OTA</span><span id="otaStatus">--</span></div>
       <div class="status"><span>Wi-Fi</span><span id="wifiStatus">--</span></div>
       <div class="status"><span>Log file</span><span id="logFile">--</span></div>
@@ -391,6 +405,11 @@ String WebUi::indexHtml() const {
       document.getElementById('sdStatus').textContent = data.system.sd_enabled ? (data.system.sd_ready ? 'OK' : 'FAULT') : 'DISABLED';
       document.getElementById('uploadStatus').textContent = data.system.upload_enabled ? (data.system.upload_connected ? data.system.upload_protocol.toUpperCase() + ' LIVE' : 'WAITING') : 'DISABLED';
       document.getElementById('uploadServer').textContent = data.system.upload_server || 'Not configured';
+      document.getElementById('queueStatus').textContent = data.system.store_forward_enabled
+        ? (data.system.store_forward_ready
+          ? data.system.store_forward_pending_records + ' pending / ' + Math.round(data.system.store_forward_pending_bytes / 1024) + ' KiB'
+          : 'FAULT')
+        : 'DISABLED';
       document.getElementById('otaStatus').textContent = data.system.ota_enabled ? (data.system.ota_ready ? 'READY' : 'LOCKED') : 'DISABLED';
       document.getElementById('wifiStatus').textContent = data.system.wifi_mode + ' ' + data.system.ip_address;
       document.getElementById('logFile').textContent = data.system.current_log_file || '--';

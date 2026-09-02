@@ -23,6 +23,7 @@ constexpr uint32_t kPairingCodeRefreshMs = 10UL * 60UL * 1000UL;
 constexpr size_t kRemoteConfigJsonCapacity = 1024;
 constexpr size_t kHttpsResponseJsonCapacity = 1536;
 constexpr uint32_t kHttpsTimeoutMs = 4000;
+constexpr uint8_t kReplayRecordsPerCycle = 2;
 
 const char kIsrgRootX1[] PROGMEM = R"CERT(-----BEGIN CERTIFICATE-----
 MIIFazCCA1OgAwIBAgIRAIIQz7DSQONZRGPgu2OCiwAwDQYJKoZIhvcNAQELBQAw
@@ -126,6 +127,8 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config,
     httpsClient_.setCACert(kIsrgRootX1);
 #endif
     httpsClient_.setTimeout(kHttpsTimeoutMs);
+    storeForwardQueue_.begin(AppConfig::kStoreForward.enabled,
+                             AppConfig::kStoreForward.maximumBytes);
     lastError_ = "";
     return true;
   }
@@ -191,24 +194,53 @@ bool LiveUpload::publishIfDue(const AppState &state) {
     return false;
   }
 
+  const uint32_t nowMs = millis();
+  const bool snapshotDue = (nowMs - lastPublishMs_) >= config_.publishIntervalMs;
   if (WiFi.status() != WL_CONNECTED) {
     publishOfflineStatusAndDisconnect();
     lastError_ = "Wi-Fi disconnected";
+    if (config_.protocol == AppConfig::UploadConfig::Protocol::Https && snapshotDue) {
+      return queueSnapshot(state);
+    }
     return false;
   }
 
-  const uint32_t nowMs = millis();
   if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    if (!snapshotDue) {
+      return false;
+    }
     if (lastStatusPublishMs_ == 0) {
-      if ((nowMs - lastHttpsAttemptMs_) < config_.reconnectIntervalMs || !publishStatus(true)) {
-        return false;
+      if (lastHttpsAttemptMs_ != 0 &&
+          (nowMs - lastHttpsAttemptMs_) < config_.reconnectIntervalMs) {
+        return queueSnapshot(state);
+      }
+      if (!publishStatus(true)) {
+        return lastPostRetryable_ ? queueSnapshot(state) : false;
       }
     }
-    if ((nowMs - lastPublishMs_) < config_.publishIntervalMs) {
-      return false;
+    if (storeForwardQueue_.pendingRecords() > 0) {
+      // Append the current sample before replay so sequence order remains
+      // monotonic. Replaying two records for every one appended drains the
+      // backlog without dropping samples gathered during recovery.
+      if (!queueSnapshot(state)) {
+        return false;
+      }
+      for (uint8_t replayed = 0;
+           replayed < kReplayRecordsPerCycle && storeForwardQueue_.pendingRecords() > 0;
+           ++replayed) {
+        if (!replayQueuedSnapshot()) {
+          return lastPostRetryable_;
+        }
+      }
+      httpsConnected_ = true;
+      lastError_ = storeForwardQueue_.pendingRecords() == 0
+                       ? ""
+                       : "Replaying onboard queue: " +
+                             String(storeForwardQueue_.pendingRecords()) + " pending";
+      return true;
     }
     if (!publishSnapshot(state)) {
-      return false;
+      return lastPostRetryable_ ? queueSnapshot(state) : false;
     }
     lastPublishMs_ = millis();
     lastError_ = "";
@@ -260,6 +292,18 @@ String LiveUpload::sessionId() const { return sessionId_; }
 String LiveUpload::lastError() const { return lastError_; }
 
 uint32_t LiveUpload::lastSequence() const { return lastSequence_; }
+
+bool LiveUpload::storeForwardEnabled() const { return storeForwardQueue_.isEnabled(); }
+bool LiveUpload::storeForwardReady() const { return storeForwardQueue_.isReady(); }
+uint32_t LiveUpload::storeForwardPendingRecords() const {
+  return storeForwardQueue_.pendingRecords();
+}
+size_t LiveUpload::storeForwardPendingBytes() const { return storeForwardQueue_.pendingBytes(); }
+size_t LiveUpload::storeForwardCapacityBytes() const { return storeForwardQueue_.capacityBytes(); }
+uint32_t LiveUpload::storeForwardDroppedRecords() const {
+  return storeForwardQueue_.droppedRecords();
+}
+String LiveUpload::storeForwardError() const { return storeForwardQueue_.lastError(); }
 
 String LiveUpload::pairingCode() const {
   return remoteManagementEnabled_ ? pairingCode_ : "";
@@ -472,6 +516,47 @@ bool LiveUpload::publishSnapshot(const AppState &state) {
   return true;
 }
 
+bool LiveUpload::queueSnapshot(const AppState &state) {
+  const uint32_t sequence = lastSequence_ + 1;
+  const String payload = buildSnapshotJson(state, sequence);
+  if (!storeForwardQueue_.enqueue(payload)) {
+    lastError_ = "HTTPS unavailable and onboard queue failed: " + storeForwardQueue_.lastError();
+    return false;
+  }
+  lastSequence_ = sequence;
+  lastPublishMs_ = millis();
+  httpsConnected_ = false;
+  lastError_ = "HTTPS unavailable; snapshot stored onboard";
+  return true;
+}
+
+bool LiveUpload::replayQueuedSnapshot() {
+  String payload;
+  if (!storeForwardQueue_.peek(payload)) {
+    lastError_ = "Onboard queue read failed: " + storeForwardQueue_.lastError();
+    return false;
+  }
+  if (postHttps("snapshot", payload)) {
+    if (!storeForwardQueue_.pop()) {
+      lastError_ = "Onboard queue acknowledge failed: " + storeForwardQueue_.lastError();
+      return false;
+    }
+    httpsConnected_ = true;
+    return true;
+  }
+  if (Logic::shouldDiscardQueuedHttpStatus(lastHttpStatus_)) {
+    const String rejectedError = lastError_;
+    if (!storeForwardQueue_.pop(true)) {
+      lastError_ = "Rejected queue record could not be discarded: " +
+                   storeForwardQueue_.lastError();
+      return false;
+    }
+    lastError_ = rejectedError + "; queued record discarded";
+    return true;
+  }
+  return false;
+}
+
 bool LiveUpload::postHttps(const char *kind, const String &payload, String *responseBody) {
   lastHttpsAttemptMs_ = millis();
   HTTPClient http;
@@ -486,6 +571,8 @@ bool LiveUpload::postHttps(const char *kind, const String &payload, String *resp
   }
   url += String(config_.httpsPath) + "/" + String(kind);
   if (!http.begin(httpsClient_, url)) {
+    lastHttpStatus_ = -1;
+    lastPostRetryable_ = true;
     lastError_ = "HTTPS request setup failed";
     httpsConnected_ = false;
     return false;
@@ -500,6 +587,8 @@ bool LiveUpload::postHttps(const char *kind, const String &payload, String *resp
   const uint8_t fragmentationBeforePost = ESP.getHeapFragmentation();
 #endif
   const int status = http.POST(payload);
+  lastHttpStatus_ = status;
+  lastPostRetryable_ = Logic::isRetryableHttpStatus(status);
   const String body = status > 0 ? http.getString() : "";
   http.end();
   if (status < 200 || status >= 300) {
@@ -523,6 +612,7 @@ bool LiveUpload::postHttps(const char *kind, const String &payload, String *resp
   if (responseBody != nullptr) {
     *responseBody = body;
   }
+  lastPostRetryable_ = false;
   return true;
 }
 

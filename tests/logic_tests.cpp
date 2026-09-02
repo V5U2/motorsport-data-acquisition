@@ -90,6 +90,17 @@ void testIntervalTiming() {
               "interval timing survives millis wrap");
 }
 
+void testHttpRetryPolicy() {
+  expectEqual(Logic::isRetryableHttpStatus(-1), 1, "retries transport failures");
+  expectEqual(Logic::isRetryableHttpStatus(502), 1, "retries gateway failures");
+  expectEqual(Logic::isRetryableHttpStatus(429), 1, "retries rate limits");
+  expectEqual(Logic::isRetryableHttpStatus(401), 0, "does not retry bad credentials");
+  expectEqual(Logic::shouldDiscardQueuedHttpStatus(422), 1,
+              "discards permanently invalid queued payloads");
+  expectEqual(Logic::shouldDiscardQueuedHttpStatus(503), 0,
+              "retains queued payloads during server outages");
+}
+
 void testTimestampFormatting() {
   expectEqual(Logic::fallbackTimestamp(12345), "boot+12345", "fallback timestamp");
   expectEqual(Logic::formatUptime(0), "00:00:00:00", "zero uptime");
@@ -144,6 +155,7 @@ int main() {
   testEngineeringScaling();
   testFilter();
   testIntervalTiming();
+  testHttpRetryPolicy();
   testTimestampFormatting();
   testFileNameNormalization();
   testUploadIdentifiers();
