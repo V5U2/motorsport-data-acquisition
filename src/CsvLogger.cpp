@@ -13,7 +13,12 @@ void CsvLogger::disable() {
 }
 
 bool CsvLogger::begin(const uint8_t chipSelectPin, SPIClass &spi) {
+#if defined(ESP8266)
+  (void)spi;
+  ready_ = SD.begin(chipSelectPin, SPI_HALF_SPEED);
+#else
   ready_ = SD.begin(chipSelectPin, spi, 25000000);
+#endif
   if (!ready_) {
     lastError_ = "microSD mount failed";
     return false;
@@ -130,7 +135,7 @@ bool CsvLogger::ensureFileOpen(
   }
 
   const bool newFile = !SD.exists(desiredName);
-  file_ = SD.open(desiredName, FILE_APPEND);
+  file_ = SD.open(desiredName.c_str(), "a");
   if (!file_) {
     lastError_ = "Open log file failed";
     return false;

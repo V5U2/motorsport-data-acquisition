@@ -81,8 +81,33 @@ void testFilter() {
   expectNear(Logic::applyLowPassFilter(10.0f, 20.0f, 2.0f), 20.0f, 0.001f, "alpha clamps high");
 }
 
+void testIntervalTiming() {
+  expectEqual(Logic::intervalElapsed(60000, 0, 60000), 1,
+              "interval is due at boundary");
+  expectEqual(Logic::intervalElapsed(59999, 0, 60000), 0,
+              "interval is not due early");
+  expectEqual(Logic::intervalElapsed(25, 0xFFFFFFF0U, 40), 1,
+              "interval timing survives millis wrap");
+}
+
+void testHttpRetryPolicy() {
+  expectEqual(Logic::isRetryableHttpStatus(-1), 1, "retries transport failures");
+  expectEqual(Logic::isRetryableHttpStatus(502), 1, "retries gateway failures");
+  expectEqual(Logic::isRetryableHttpStatus(429), 1, "retries rate limits");
+  expectEqual(Logic::isRetryableHttpStatus(401), 0, "does not retry bad credentials");
+  expectEqual(Logic::shouldDiscardQueuedHttpStatus(422), 1,
+              "discards permanently invalid queued payloads");
+  expectEqual(Logic::shouldDiscardQueuedHttpStatus(503), 0,
+              "retains queued payloads during server outages");
+}
+
 void testTimestampFormatting() {
   expectEqual(Logic::fallbackTimestamp(12345), "boot+12345", "fallback timestamp");
+  expectEqual(Logic::formatUptime(0), "00:00:00:00", "zero uptime");
+  expectEqual(Logic::formatUptime(93784000), "01:02:03:04",
+              "formats uptime as days hours minutes seconds");
+  expectEqual(Logic::formatUptime(1ULL << 32), "49:17:02:47",
+              "formats extended uptime beyond millis wrap");
   expectEqual(Logic::formatTimestamp(2026, 3, 4, 5, 6, 7), "2026-03-04 05:06:07",
               "RTC timestamp formatting");
   expectEqual(Logic::formatDateStamp(2026, 3, 4), "20260304", "date stamp formatting");
@@ -115,6 +140,11 @@ void testUploadIdentifiers() {
   expectEqual(Logic::formatUploadTopic("/motorsport/live/", "Car 01", "Telemetry"),
               "motorsport/live/car-01/telemetry", "formats MQTT topic");
   expectEqual(Logic::formatSessionId("Car 01", 42), "car-01-boot-42", "formats session id");
+  expectEqual(Logic::formatPairingCode(0), "AAAA-AAAA", "formats zero pairing entropy");
+  const std::string pairingCode = Logic::formatPairingCode(0x123456789aULL);
+  expectEqual(static_cast<int>(pairingCode.size()), 9, "formats pairing code with separator");
+  expectEqual(static_cast<int>(pairingCode[4]), static_cast<int>('-'),
+              "places pairing code separator");
 }
 
 }  // namespace
@@ -124,6 +154,8 @@ int main() {
   testFaultThresholds();
   testEngineeringScaling();
   testFilter();
+  testIntervalTiming();
+  testHttpRetryPolicy();
   testTimestampFormatting();
   testFileNameNormalization();
   testUploadIdentifiers();

@@ -14,6 +14,9 @@
 #ifndef APEXI_WIFI_STATION_PASSWORD
 #define APEXI_WIFI_STATION_PASSWORD ""
 #endif
+#ifndef APEXI_OTA_PASSWORD
+#define APEXI_OTA_PASSWORD ""
+#endif
 #ifndef APEXI_MQTT_HOST
 #define APEXI_MQTT_HOST ""
 #endif
@@ -23,10 +26,32 @@
 #ifndef APEXI_MQTT_PASSWORD
 #define APEXI_MQTT_PASSWORD ""
 #endif
+#ifndef APEXI_HTTPS_UPLOAD_ENABLED
+#define APEXI_HTTPS_UPLOAD_ENABLED 0
+#endif
+#ifndef APEXI_HTTPS_HOST
+#define APEXI_HTTPS_HOST ""
+#endif
+#ifndef APEXI_HTTPS_PATH
+#define APEXI_HTTPS_PATH "/api/v1/device/loggers/ingest"
+#endif
+#ifndef APEXI_CF_ACCESS_CLIENT_ID
+#define APEXI_CF_ACCESS_CLIENT_ID ""
+#endif
+#ifndef APEXI_CF_ACCESS_CLIENT_SECRET
+#define APEXI_CF_ACCESS_CLIENT_SECRET ""
+#endif
+#ifndef APEXI_APP_DEVICE_TOKEN
+#define APEXI_APP_DEVICE_TOKEN ""
+#endif
+#ifndef APEXI_FIRMWARE_VERSION
+#define APEXI_FIRMWARE_VERSION "dev"
+#endif
 
 namespace AppConfig {
 
-constexpr float kShuntResistanceOhms = 165.0f;
+// DFRobot SEN0262 presents a 120 ohm sense path (0-25 mA -> 0-3 V).
+constexpr float kShuntResistanceOhms = 120.0f;
 constexpr uint8_t kAds1115Address = 0x48;
 constexpr uint8_t kDs3231Address = 0x68;
 constexpr uint8_t kRv3028Address = 0x52;
@@ -67,6 +92,8 @@ struct WifiConfig {
   WifiMode mode;
   const char *apSsid;
   const char *apPassword;
+  uint8_t apAddress[4];
+  uint8_t apChannel;
   const char *stationSsid;
   const char *stationPassword;
   uint8_t connectTimeoutSeconds;
@@ -77,9 +104,17 @@ struct FeatureConfig {
   bool rtcEnabled;
   bool sdLoggingEnabled;
   bool liveUploadEnabled;
+  bool otaUpdatesEnabled;
+};
+
+struct OtaConfig {
+  const char *hostname;
+  const char *password;
 };
 
 struct UploadConfig {
+  enum class Protocol : uint8_t { Mqtt, Https };
+  Protocol protocol;
   const char *deviceId;
   const char *mqttHost;
   uint16_t mqttPort;
@@ -88,6 +123,15 @@ struct UploadConfig {
   const char *topicPrefix;
   uint32_t publishIntervalMs;
   uint16_t reconnectIntervalMs;
+  const char *httpsPath;
+  const char *cloudflareAccessClientId;
+  const char *cloudflareAccessClientSecret;
+  const char *appDeviceToken;
+};
+
+struct StoreForwardConfig {
+  bool enabled;
+  size_t maximumBytes;
 };
 
 struct RtcConfig {
@@ -107,6 +151,7 @@ struct PinConfig {
   int8_t tftBacklight;
   uint8_t sdCs;
   uint8_t buttonPin;
+  uint8_t statusLed;
 };
 
 struct DisplayConfig {
@@ -118,15 +163,16 @@ struct DisplayConfig {
 inline constexpr PinConfig kPins{
     PIN_I2C_SDA,
     PIN_I2C_SCL,
-    PIN_SPI_MOSI,
-    PIN_SPI_MISO,
-    PIN_SPI_SCLK,
+    MDA_PIN_SPI_MOSI,
+    MDA_PIN_SPI_MISO,
+    MDA_PIN_SPI_SCLK,
     PIN_TFT_CS,
     PIN_TFT_DC,
     PIN_TFT_RST,
     PIN_TFT_BL,
     PIN_SD_CS,
     PIN_UI_BUTTON,
+    PIN_STATUS_LED,
 };
 
 inline constexpr RtcConfig kRtc{
@@ -134,6 +180,7 @@ inline constexpr RtcConfig kRtc{
     kRv3028Address,
 };
 
+// Current bench configuration: pressure on ADS1115 A0 and temperature on A1.
 inline constexpr std::array<SensorConfig, 2> kSensorConfigs{{
     {
         "oil_pressure",
@@ -142,10 +189,10 @@ inline constexpr std::array<SensorConfig, 2> kSensorConfigs{{
         4.0f,
         20.0f,
         0.0f,
-        10.0f,
+        8.0f,
         "bar",
         1.5f,
-        8.5f,
+        7.5f,
         0.18f,
     },
     {
@@ -174,31 +221,54 @@ inline constexpr TimingConfig kTiming{
 };
 
 inline constexpr WifiConfig kWifi{
-    WifiMode::SoftAp,
+    WifiMode::Station,
     "MDA-LOGGER",
-    "changeme1",
+    "",
+    {192, 168, 44, 1},
+    6,
     APEXI_WIFI_STATION_SSID,
     APEXI_WIFI_STATION_PASSWORD,
-    10,
+    30,
 };
 
 inline constexpr FeatureConfig kFeatures{
-    true,
-    true,
-    true,
     false,
+    true,
+#if defined(ESP32)
+    false,
+#else
+    true,
+#endif
+    true,
+    true,
+};
+
+inline constexpr OtaConfig kOta{
+    "mda-logger",
+    APEXI_OTA_PASSWORD,
 };
 
 inline constexpr UploadConfig kLiveUpload{
+    APEXI_HTTPS_UPLOAD_ENABLED ? UploadConfig::Protocol::Https : UploadConfig::Protocol::Mqtt,
     "mda-logger",
-    APEXI_MQTT_HOST,
-    1883,
+    APEXI_HTTPS_UPLOAD_ENABLED ? APEXI_HTTPS_HOST : APEXI_MQTT_HOST,
+    APEXI_HTTPS_UPLOAD_ENABLED ? 443 : 1883,
     APEXI_MQTT_USERNAME,
     APEXI_MQTT_PASSWORD,
     "motorsport/logger",
     250,
     5000,
+    APEXI_HTTPS_PATH,
+    APEXI_CF_ACCESS_CLIENT_ID,
+    APEXI_CF_ACCESS_CLIENT_SECRET,
+    APEXI_APP_DEVICE_TOKEN,
 };
+
+#if defined(ESP32)
+inline constexpr StoreForwardConfig kStoreForward{true, 10UL * 1024UL * 1024UL};
+#else
+inline constexpr StoreForwardConfig kStoreForward{false, 0};
+#endif
 
 inline constexpr DisplayConfig kDisplay{
     1,

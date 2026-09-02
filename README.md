@@ -1,18 +1,21 @@
 # Motorsport Data Acquisition
 
-ESP32-S3 Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and dashboard.
+Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and dashboard, targeting classic ESP32 DevKit/WROOM-class boards and the NodeMCU 1.0 / ESP-12E DevKit V2.
 
 ## Features
 - Reads a configurable set of 4-20 mA sensors through an ADS1115-based analog front end
 - Displays live gauges and diagnostics on a 480x320 SPI TFT
 - Logs CSV data to microSD with RTC timestamps when RTC hardware is fitted
 - Serves a lightweight Wi-Fi dashboard and CSV download endpoints
-- Publishes live telemetry over MQTT when station Wi-Fi and broker settings are configured
+- Publishes live telemetry over MQTT or authenticated HTTPS when station Wi-Fi and upstream settings are configured
+- Buffers retryable HTTPS failures in a persistent circular onboard-flash queue on the 16 MB ESP32 target and replays them oldest-first after recovery
+- Lights the NodeMCU built-in LED steadily once firmware setup begins
 - Keeps pin mapping, sensor calibration, and refresh rates in one config file
+- Synchronises the RV-3028 from NTP at every networked boot and hourly thereafter, while retaining RTC holdover when offline
 
 ## Required hardware
 
-This project targets a TinyS3-based logger with external 4-20 mA receiver modules and optional display, RTC, and storage hardware.
+This project targets a NodeMCU 1.0 / ESP-12E DevKit V2 logger with external 4-20 mA receiver modules. The supported default uses a 0-8 bar pressure transmitter through a DFRobot SEN0262 into ADS1115 channel A0 and a 0-150 degrees Celsius temperature transmitter through a second SEN0262 into channel A1. Field transmitters are ordered for direct operation from the protected 12 V vehicle supply; the 24 V boost path is only a fallback when a transmitter cannot meet its loop compliance requirement at 12 V.
 
 For the detailed BOM, pin table, wiring guidance, and commissioning steps, see [docs/hardware-setup.md](docs/hardware-setup.md).
 
@@ -34,24 +37,47 @@ Primary source files:
 
 ## Build and flash
 1. Install PlatformIO Core or use the PlatformIO VS Code extension.
-2. Review the pin mapping in [`include/PinDefinitions.h`](include/PinDefinitions.h) and update it for the actual ESP32-S3 dev board and TFT used.
-3. Review sensor ranges, timing values, live upload settings, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h). Copy `include/AppSecrets.example.h` to the ignored `include/AppSecrets.h` and set Wi-Fi/MQTT credentials there.
+2. Wire the NodeMCU or classic ESP32 DevKit using the matching GPIO table in [`docs/hardware-setup.md`](docs/hardware-setup.md), then review [`include/PinDefinitions.h`](include/PinDefinitions.h).
+3. Review sensor ranges, timing values, live upload settings, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h). Copy `include/AppSecrets.example.h` to the ignored `include/AppSecrets.h` and set Wi-Fi plus MQTT or HTTPS credentials there.
 4. Run [`scripts/verify-repo.sh`](scripts/verify-repo.sh) `--fast` for host-side verification and contract checks, and `--full` when the local PlatformIO toolchain is available.
-5. Build and upload with `pio run -t upload`.
-6. Open the serial monitor with `pio device monitor`.
+5. Build and upload with `pio run -t upload --upload-port /dev/cu.usbserial-10`, replacing the port when needed.
+6. Open the serial monitor at 115200 baud with `pio device monitor`. If a CH340-based board stays in reset, open the port with DTR and RTS inactive or press the board's `RST` button once.
+
+## Wi-Fi firmware updates
+
+The ESP8266 supports password-protected Arduino OTA updates while connected in station mode. Set a strong, unique `APEXI_OTA_PASSWORD` in the ignored `include/AppSecrets.h`; OTA remains locked when that value is empty. The local `/api/live` response reports `ota_enabled` and `ota_ready` so update availability can be checked without exposing the password.
+
+The first OTA-capable firmware must be installed over USB. After that, build and upload on the same trusted network with the helper script, which reads the password from the ignored secrets header without printing it:
+
+```sh
+./scripts/upload-ota.sh mda-logger.local
+```
+
+An IP address can be supplied instead if `.local` discovery is unavailable. Do not commit the password or expose Arduino OTA beyond the trusted device network. OTA provides authenticated transfer, not transport encryption.
 
 ## Live streaming
 
-The firmware now includes a live telemetry publisher for near-real-time upload. The current implementation uses MQTT for the live path and is disabled by default. Enable it in [`include/AppConfig.h`](include/AppConfig.h), switch Wi-Fi to station mode, and configure the broker and credentials in an ignored `include/AppSecrets.h` created from [`include/AppSecrets.example.h`](include/AppSecrets.example.h).
+The firmware includes a live telemetry publisher for near-real-time upload. MQTT remains the normal LAN transport. Set `APEXI_HTTPS_UPLOAD_ENABLED=1` to use the Access-protected HTTPS compatibility transport when the broker is not directly reachable. Configure the Cloudflare Access service-token pair and the scoped app device token only in the ignored `include/AppSecrets.h` created from [`include/AppSecrets.example.h`](include/AppSecrets.example.h). HTTPS validates the public certificate chain against ISRG Root X1; it never disables TLS verification.
 
-Production brokers require authentication. Set `APEXI_MQTT_USERNAME` to the same normalized value as `kLiveUpload.deviceId`; the broker ACL uses that identity to limit the device to `<topicPrefix>/<deviceId>/live` and `<topicPrefix>/<deviceId>/status`. Keep the matching password in the encrypted infrastructure vault and never commit `AppSecrets.h`.
+The local dashboard separates connectivity, hardware, storage, and diagnostic state. It shows the active upstream endpoint, whether the server is connected, whether remote management is enabled locally, and the applied remote-configuration version. Open `/settings` to change the server host, port, live-upload enable flag, primary and secondary NTP servers, POSIX timezone rule, displayed timezone label, and the optional remote-management flag. The page uses HTTP Digest authentication with username `admin` and the device's OTA password. These settings are stored in a versioned, checksummed flash-backed EEPROM record and survive power loss. For HTTPS, the Cloudflare Access client ID and secret may be compiled from the ignored secrets header or replaced through write-only settings fields. Existing credential values are never returned in the page or API; leaving a field blank keeps the current value. Saving settings restarts the logger so the new endpoint, credentials, and clock configuration are applied cleanly.
+
+Remote management is disabled by default. Enabling it locally requires live upload and displays a temporary pairing code with a refresh countdown on the authenticated settings page. The logger replaces that proof every ten minutes and immediately reports the replacement through its status heartbeat. Enter only the code in the app's shared device-pairing field; the app identifies the logger automatically. Management heartbeats include the effective live-upload flag, NTP servers, timezone rule, and timezone label so the app can initialise its form from the logger's current non-secret configuration. MQTT receives desired configuration from the device-scoped topic; HTTPS receives it in the authenticated status response. Desired documents use schema version 1, must match the authenticated device identity, carry a monotonically increasing configuration version, and contain the complete allow-listed configuration snapshot. Upstream host and credentials are deliberately excluded so a remote command cannot redirect or strand the logger.
+
+The default clock configuration uses `pool.ntp.org`, `time.google.com`, POSIX timezone rule `AWST-8`, and display label `AWST`. The dashboard reports whether the RTC has been synchronised from NTP during the current boot, plus the last successful synchronization time. A valid RTC remains the offline holdover source between network synchronizations. POSIX offsets have reversed signs: for example, Perth is `AWST-8`, UTC is `UTC0`, and Sydney with daylight saving is `AEST-10AEDT,M10.1.0,M4.1.0/3`.
+
+Dashboard uptime is displayed as `DD:HH:mm:ss`. The live API retains numeric `uptime_ms` for compatibility and also exposes the formatted value as `uptime`.
+
+The ESP32 target uses the checked-in 16 MB partition table: two 2 MB OTA application slots plus an approximately 12 MB LittleFS partition. Store-and-forward is capped at 10 MB and split across two append-only segments; when capacity is exhausted, rotation drops the oldest remaining segment and reports the drop count. Only failed HTTPS snapshots are written, limiting flash wear during normal connected operation. The NodeMCU target keeps its existing 4 MB layout and does not enable this queue.
+
+Production brokers require authentication. Set `APEXI_MQTT_USERNAME` to the same normalized value as `kLiveUpload.deviceId`; the broker ACL uses that identity to limit the device to publishing `<topicPrefix>/<deviceId>/live` and `<topicPrefix>/<deviceId>/status`. When remote management is enabled, it may additionally read only its own `<topicPrefix>/<deviceId>/config/desired` topic. Keep the matching password in the encrypted infrastructure vault and never commit `AppSecrets.h`.
 
 Current behavior:
 - The device publishes live sensor snapshots to MQTT on a fixed interval.
 - Each message includes `schema_version`, a normalized `device_id`, a per-boot `session_id`, a monotonic `sequence`, the current timestamp, and the current sensor values.
 - The retained MQTT status topic now reflects both online and offline state so downstream consumers do not keep stale liveness.
 - The firmware exposes live upload state through the local web UI and `/api/live`.
-- Local SD logging remains the durable on-device record when SD logging is enabled.
+- The ESP32 local UI exposes onboard queue readiness, pending records/bytes, drops, and queue errors.
+- Local SD logging remains optional for long-duration/removable CSV archives.
 
 ### Starting and stopping a live session
 
@@ -59,42 +85,42 @@ There is no separate start-event command in the firmware. When `kFeatures.liveUp
 
 Before using the logger on track:
 
-1. Confirm the local UI reports station Wi-Fi connected and `MQTT LIVE`.
+1. Confirm the local UI reports station Wi-Fi connected and either `MQTT LIVE` or `HTTPS LIVE`.
 2. Check `/api/live` under `system` for `upload_enabled: true`, `upload_connected: true`, the expected `upload_session_id`, an increasing `upload_sequence`, and an empty `last_upload_error`.
 3. Confirm the corresponding session appears in the telemetry app's **Ungrouped Sessions**, then attach it to the prepared event.
 
 Powering down, losing Wi-Fi, or losing MQTT marks the stream offline through retained status or the MQTT last will. The telemetry app owns durable session finalization; the device does not finalize server-side data. Follow the telemetry app [Live Event Operations runbook](https://github.com/V5U2/motorsport-telemetry-app/blob/main/docs/live-events.md) for the complete race-day procedure.
 
 Current limits:
-- This repository currently implements the MQTT live stream only.
-- HTTP backlog upload and store-and-forward replay are not implemented yet.
-- For motorsport use with spotty connectivity, the intended next step is an HTTP batch uploader that drains unsent SD log segments after connectivity returns.
+- MQTT and Access-authenticated HTTPS emit the same versioned live/status payloads.
+- ESP32 store-and-forward currently replays individual snapshots through the compatibility endpoint; server-side batch ingest remains a future throughput optimization.
 
 Mermaid overview:
 
 ```mermaid
 flowchart LR
-    A["4-20 mA Sensors"] --> B["ESP32-S3 Firmware"]
+    A["4-20 mA Sensors"] --> B["ESP32 / ESP8266 Firmware"]
     B --> C["ADS1115 Sampling"]
     C --> D["App State"]
     D --> E["TFT Dashboard (Optional)"]
     D --> F["Web UI / Local API"]
     D --> G["CSV Logger (Optional SD)"]
-    D --> H["MQTT Live Upload"]
-    H --> I["MQTT Broker"]
-    I --> J["Realtime Dashboards / Alerts / Stream Processing"]
-    G --> K["HTTP Backlog Upload (Planned)"]
-    K --> L["Server-side Session Store / Analytics"]
+    D --> H["MQTT / HTTPS Live Upload"]
+    H --> I["Gateway / App Ingest"]
+    D --> K["ESP32 Onboard Failure Queue"]
+    K --> H
+    I --> J["Realtime Dashboards / Analytics"]
 ```
 
 Recommended configuration model:
-- Use MQTT for low-latency live telemetry.
-- Keep SD logging enabled when durable local recovery matters.
-- Add a later HTTP backlog uploader for reliable store-and-forward of missed samples.
+- Use authenticated HTTPS on the ESP32 when Cloudflare Access ingress is required.
+- Use the onboard queue for transient connectivity recovery.
+- Keep SD logging enabled only when long-term removable CSV archives are required.
 
 Default MQTT topic layout:
 - `<topicPrefix>/<deviceId>/live`
 - `<topicPrefix>/<deviceId>/status`
+- `<topicPrefix>/<deviceId>/config/desired` (retained, device-specific, opt-in read)
 
 MQTT payload compatibility:
 - Current live and status payloads use `schema_version: 1`.
@@ -109,7 +135,7 @@ Example live payload shape:
   "device_id": "mda-logger",
   "session_id": "mda-logger-boot-42",
   "sequence": 12,
-  "timestamp": "2026-04-05 10:15:30",
+  "timestamp": "2026-04-05T02:15:30Z",
   "uptime_ms": 15234,
   "sensors": [
     {
@@ -134,7 +160,11 @@ Example live payload shape:
 - Hold the UI button for 1.2 seconds to clear latched sensor faults.
 
 ## Web endpoints
-- `/` simple phone-friendly dashboard mirror
+The checked-in default is station mode. Create the ignored `include/AppSecrets.h` from the example and provide a 2.4 GHz SSID/password; `fast_connect`-style BSSID/channel pinning is not used, so the ESP8266 performs a normal network scan. If station association times out, firmware falls back to the open 2.4 GHz SoftAP `MDA-LOGGER` at `http://192.168.44.1` on channel 6. Set `AppConfig::kWifi.apPassword` to an 8+ character WPA2 key if a closed fallback AP is required.
+- `/` compact phone-friendly sensor dashboard with a basic fault summary
+- `/diagnostics` detailed connectivity, hardware, storage, transport, and sensor diagnostics
 - `/api/live` current readings and system state as JSON
 - `/api/files` available CSV files on the SD card
 - `/download/<file>` fetch a CSV log file
+
+The dashboard sizes sensor cards to their readings instead of stretching them across the page. Use the **Diagnostics** action beside **Settings**, or the fault-finding card, to open the full system view. The CSV card is visibly disabled and does not poll the file API when microSD logging is disabled in the firmware.

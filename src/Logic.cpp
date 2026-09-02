@@ -68,8 +68,39 @@ float applyLowPassFilter(const float previousValue, const float currentValue, co
   return (clampedAlpha * currentValue) + ((1.0f - clampedAlpha) * previousValue);
 }
 
+bool intervalElapsed(const uint32_t nowMs,
+                     const uint32_t previousMs,
+                     const uint32_t intervalMs) {
+  return static_cast<uint32_t>(nowMs - previousMs) >= intervalMs;
+}
+
+bool isRetryableHttpStatus(const int status) {
+  return status < 0 || status == 408 || status == 425 || status == 429 || status >= 500;
+}
+
+bool shouldDiscardQueuedHttpStatus(const int status) {
+  return status == 400 || status == 404 || status == 413 || status == 422;
+}
+
 std::string fallbackTimestamp(const uint32_t uptimeMs) {
   return "boot+" + std::to_string(uptimeMs);
+}
+
+std::string formatUptime(const uint64_t uptimeMs) {
+  const uint64_t totalSeconds = uptimeMs / 1000ULL;
+  const uint64_t days = totalSeconds / 86400ULL;
+  const uint64_t hours = (totalSeconds / 3600ULL) % 24ULL;
+  const uint64_t minutes = (totalSeconds / 60ULL) % 60ULL;
+  const uint64_t seconds = totalSeconds % 60ULL;
+  char buffer[32];
+  std::snprintf(buffer,
+                sizeof(buffer),
+                "%02llu:%02llu:%02llu:%02llu",
+                static_cast<unsigned long long>(days),
+                static_cast<unsigned long long>(hours),
+                static_cast<unsigned long long>(minutes),
+                static_cast<unsigned long long>(seconds));
+  return std::string(buffer);
 }
 
 std::string formatTimestamp(const int year,
@@ -183,6 +214,18 @@ std::string formatSessionId(std::string_view deviceId, const uint32_t bootCounte
   const std::string normalizedDevice = normalizeTopicSegment(deviceId);
   const std::string prefix = normalizedDevice.empty() ? "logger" : normalizedDevice;
   return prefix + "-boot-" + std::to_string(bootCounter);
+}
+
+std::string formatPairingCode(uint64_t entropy) {
+  constexpr char kPairingAlphabet[] = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  char pairingBuffer[10]{};
+  for (size_t index = 0; index < 8; ++index) {
+    const size_t outputIndex = index < 4 ? index : index + 1;
+    pairingBuffer[outputIndex] = kPairingAlphabet[entropy & 0x1FULL];
+    entropy >>= 5;
+  }
+  pairingBuffer[4] = '-';
+  return std::string(pairingBuffer);
 }
 
 }  // namespace Logic
