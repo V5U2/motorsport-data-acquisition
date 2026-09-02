@@ -482,27 +482,32 @@ bool LiveUpload::parseRemoteConfig(const uint8_t *payload,
       return false;
     }
   }
-  config = {};
-  config.version = version;
-  if (settings.containsKey("upload_enabled")) {
-    if (!settings["upload_enabled"].is<bool>()) {
-      return false;
-    }
-    config.hasUploadEnabled = true;
-    config.uploadEnabled = settings["upload_enabled"].as<bool>();
+  // The app sends a complete desired-settings snapshot. Requiring every field
+  // prevents a version-only payload from being acknowledged as applied while
+  // silently retaining the logger's previous values.
+  if (!settings["upload_enabled"].is<bool>() ||
+      !settings["ntp_primary"].is<const char *>() ||
+      !settings["ntp_secondary"].is<const char *>() ||
+      !settings["tz_rule"].is<const char *>() ||
+      !settings["tz_label"].is<const char *>()) {
+    return false;
   }
-  const char *primary = settings["ntp_primary"] | nullptr;
-  const char *secondary = settings["ntp_secondary"] | nullptr;
-  const char *rule = settings["tz_rule"] | nullptr;
-  const char *label = settings["tz_label"] | nullptr;
+  const char *primary = settings["ntp_primary"].as<const char *>();
+  const char *secondary = settings["ntp_secondary"].as<const char *>();
+  const char *rule = settings["tz_rule"].as<const char *>();
+  const char *label = settings["tz_label"].as<const char *>();
   if (!validRemoteText(primary, 63) || !validRemoteText(secondary, 63) ||
       !validRemoteText(rule, 63) || !validRemoteText(label, 31)) {
     return false;
   }
-  config.ntpPrimary = primary == nullptr ? "" : primary;
-  config.ntpSecondary = secondary == nullptr ? "" : secondary;
-  config.timeZoneRule = rule == nullptr ? "" : rule;
-  config.timeZoneLabel = label == nullptr ? "" : label;
+  config = {};
+  config.version = version;
+  config.hasUploadEnabled = true;
+  config.uploadEnabled = settings["upload_enabled"].as<bool>();
+  config.ntpPrimary = primary;
+  config.ntpSecondary = secondary;
+  config.timeZoneRule = rule;
+  config.timeZoneLabel = label;
   return true;
 }
 
