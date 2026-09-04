@@ -143,7 +143,28 @@ ESP32 station and owner credentials come from the identity-bound USB [provisioni
 
 For ESP32 commissioning, use [`scripts/provision_device.py`](../scripts/provision_device.py) and never commit the secret bundle. The eFuse-derived `mda-xxxxxxxxxxxx` identity becomes the Wi-Fi hostname, upload identity, MQTT username requirement, and app bearer subject. The Access application must use a **Service Auth** policy for its device-specific token; the device sends both Access headers and its app bearer on every request. Local credential fields remain write-only: neither their values nor Wi-Fi, OTA, MQTT, or app credentials are returned to the browser or local status API.
 
-Remote management is optional and starts disabled. To pair a logger, first enable both **Live upload** and **Allow remote management** on the digest-authenticated local `/settings` page. Reopen `/settings`, then enter its temporary eight-character code in the app's single **User profile → Paired devices** field; no logger ID is required. The page shows when the code will refresh, and the device generates and publishes a replacement every ten minutes. After the app identifies and claims it as a telemetry logger, explicitly enable remote configuration for that logger. Each management heartbeat reports the logger's current live-upload and NTP/timezone values so the app can pre-fill its form without exposing Cloudflare Access, app, MQTT, Wi-Fi, or OTA credentials. The device checks desired configuration identity, completeness, and monotonic version before persisting it. If recovery is needed, disable remote management locally; no app command may change the broker host, MQTT credential, OTA password, sensor calibration, or remote-management opt-in.
+Remote management is optional and starts disabled. For production ESP32, set
+`remote_management_enabled` in the identity-bound USB provisioning bundle only
+when the owner has opted in; the disabled local settings route cannot enable it.
+The ESP8266 development target retains its digest-authenticated local toggle.
+After an enabled logger checks in, enter its temporary eight-character code in
+the app's single **User profile → Paired devices** field; no logger ID is
+required. The code refreshes every ten minutes. After claim, explicitly enable
+remote configuration for that logger in the app. Each management heartbeat
+reports the logger's current live-upload and NTP/timezone values so the app can
+pre-fill its form without exposing Cloudflare Access, app, MQTT, Wi-Fi, OTA, or
+bearer credentials. The device checks desired configuration identity,
+completeness, and monotonic version before persisting it. No app command may
+change the broker host, MQTT credential, OTA password, sensor calibration, or
+remote-management opt-in.
+
+On ESP32 HTTPS deployments, app bearer rotation uses the same outbound status
+path and does not require another pin or inbound service. Do not remove power
+during a planned cutover merely to force an update: the staged rotation survives
+power loss and resumes automatically, while the old bearer is retained until the
+candidate is proven. If both credentials are rejected after the server overlap,
+perform the documented physical owner reset and authorized USB re-provisioning;
+do not erase eFuses or substitute a fleet-wide credential.
 
 An armed live-session plan is delivered in that desired document and acknowledged under `management.assignment` in the next status heartbeat. Confirm its target, role, expiry, and state before a run. Once the app observes the firmware's new per-boot source, the assignment becomes claimed and reports both the unchanged source ID and canonical recording ID. If assignment delivery is offline, expired, revoked, or invalid, continue the local run normally; never restart merely to obtain server assignment state, and recover the unassigned source in the app afterward.
 

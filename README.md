@@ -67,7 +67,27 @@ The firmware includes a live telemetry publisher for near-real-time upload. MQTT
 
 The local dashboard separates connectivity, hardware, storage, and diagnostic state. It shows the active upstream endpoint, whether the server is connected, whether remote management is enabled locally, the applied remote-configuration version, and non-secret Secure Boot/flash-encryption posture. ESP32 local settings GET and POST return HTTP 410; configure it using identity-bound USB provisioning or the optional allow-listed app management path. The legacy digest-authenticated `/settings` page remains only on ESP8266 development firmware. Neither diagnostics nor `/api/live` returns Wi-Fi, OTA, MQTT, Cloudflare, app bearer, recovery, encryption, or signing secrets.
 
-Remote management is disabled by default. Enabling it locally requires live upload and displays a temporary pairing code with a refresh countdown on the authenticated settings page. The logger replaces that proof every ten minutes and immediately reports the replacement through its status heartbeat. Enter only the code in the app's shared device-pairing field; the app identifies the logger automatically. Management heartbeats include the effective live-upload flag, NTP servers, timezone rule, and timezone label so the app can initialise its form from the logger's current non-secret configuration. MQTT receives desired configuration from the device-scoped topic; HTTPS receives it in the authenticated status response. Desired documents use schema version 1, must match the authenticated device identity, carry a monotonically increasing configuration version, and contain the complete allow-listed configuration snapshot. Upstream host and credentials are deliberately excluded so a remote command cannot redirect or strand the logger.
+Remote management is disabled by default. Production ESP32 owners opt in with
+`remote_management_enabled` in the USB provisioning bundle; the ESP8266
+development target retains its local toggle. An enabled logger displays a
+temporary pairing code and replaces it every ten minutes through its status
+heartbeat. Enter only the code in the app's shared device-pairing field; the app
+identifies the logger automatically. Management heartbeats include the effective
+live-upload flag, NTP servers, timezone rule, and timezone label so the app can
+initialise its form from the logger's current non-secret configuration. MQTT
+receives desired configuration from the device-scoped topic; HTTPS receives it
+in the authenticated status response. Desired documents use schema version 1,
+must match the authenticated device identity, carry a monotonically increasing
+configuration version, and contain the complete allow-listed configuration
+snapshot. Upstream host and credentials are deliberately excluded so a remote
+command cannot redirect or strand the logger.
+
+HTTPS ESP32 loggers also consume app-managed bearer rotation. A candidate is
+durably staged, acknowledged with the old bearer, and promoted only after the
+new bearer proves it can authenticate. The old bearer is retained across retry
+and power loss until proof succeeds. Status reports only rotation version, nonce,
+and state; bearer values never appear in telemetry, diagnostics, or logs. See
+[ESP32 identity and provisioning](docs/provisioning.md) for recovery behavior.
 
 The same desired document carries a planned-session assignment independently of configuration version. The logger accepts only `unassigned`, `armed`, `claimed`, `finished`, `revoked`, or `expired`, reports the last accepted state in subsequent heartbeats, and never replaces its firmware-generated per-boot source session ID. Missing, stale, or invalid assignment state cannot interrupt sensor acquisition or local SD capture; first-source routing and the canonical recording ID remain server responsibilities.
 

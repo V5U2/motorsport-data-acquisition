@@ -11,6 +11,7 @@
 #endif
 
 #include "AppConfig.h"
+#include "AppBearerRotation.h"
 #include "CsvLogger.h"
 #include "Dashboard.h"
 #include "DeviceProvisioning.h"
@@ -40,6 +41,7 @@ WebUi webUi;
 LiveUpload liveUpload;
 RuntimeSettings runtimeSettings;
 DeviceProvisioning deviceProvisioning;
+AppBearerRotation appBearerRotation;
 
 bool adcReady = false;
 bool rtcReady = false;
@@ -303,7 +305,8 @@ void setup() {
     if ((millis() - resetStartedMs) >= 5000) {
       const bool ownerCleared = deviceProvisioning.factoryResetOwnerCredentials();
       const bool runtimeCleared = runtimeSettings.factoryReset();
-      Serial.println(ownerCleared && runtimeCleared
+      const bool bearerCleared = appBearerRotation.factoryReset();
+      Serial.println(ownerCleared && runtimeCleared && bearerCleared
                          ? "FACTORY_RESET=owner-credentials-cleared"
                          : "FACTORY_RESET=failed-closed");
       Serial.flush();
@@ -318,7 +321,8 @@ void setup() {
     if (Serial.available() > 0) {
       const String command = Serial.readStringUntil('\n');
       const bool provisioningAccepted = deviceProvisioning.acceptSerialCommand(command);
-      if (provisioningAccepted && runtimeSettings.factoryReset()) {
+      if (provisioningAccepted && runtimeSettings.factoryReset() &&
+          appBearerRotation.factoryReset()) {
         Serial.println("PROVISIONING_RESULT=accepted");
         Serial.flush();
         delay(250);
@@ -369,7 +373,10 @@ void setup() {
                                              secureBootEnabled,
                                              flashEncryptionReleaseMode);
   if (networkAllowed) {
-    runtimeSettings.begin(deviceProvisioning.uploadConfig(), AppConfig::kFeatures.liveUploadEnabled);
+    appBearerRotation.begin(deviceProvisioning.uploadConfig().appDeviceToken);
+    runtimeSettings.begin(deviceProvisioning.uploadConfig(),
+                          AppConfig::kFeatures.liveUploadEnabled,
+                          deviceProvisioning.remoteManagementEnabled());
     wifiReady = webUi.begin(deviceProvisioning.wifiConfig(), csvLogger, runtimeSettings,
                             deviceProvisioning.deviceId(),
                             deviceProvisioning.otaConfig().password,
@@ -377,7 +384,8 @@ void setup() {
     liveUpload.begin(runtimeSettings.uploadConfig(),
                      runtimeSettings.liveUploadEnabled(),
                      runtimeSettings.remoteManagementEnabled(),
-                     runtimeSettings.appliedConfigVersion());
+                     runtimeSettings.appliedConfigVersion(),
+                     &appBearerRotation);
     liveUpload.setReportedConfig(runtimeSettings.liveUploadEnabled(),
                                  runtimeSettings.ntpPrimary(),
                                  runtimeSettings.ntpSecondary(),

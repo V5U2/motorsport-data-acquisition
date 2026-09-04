@@ -25,6 +25,15 @@ mkdir -p "$BUILD_DIR"
 
 "$BUILD_DIR/store_forward_queue_tests"
 
+/usr/bin/c++ -std=c++17 -Wall -Wextra -Werror -DAPEXI_HOST_TEST \
+  -I"$ROOT_DIR/tests/fakes" \
+  -I"$ROOT_DIR/include" \
+  "$ROOT_DIR/src/AppBearerRotation.cpp" \
+  "$ROOT_DIR/tests/app_bearer_rotation_tests.cpp" \
+  -o "$BUILD_DIR/app_bearer_rotation_tests"
+
+"$BUILD_DIR/app_bearer_rotation_tests"
+
 python3 -m unittest "$ROOT_DIR/tests/test_provision_device.py"
 python3 -m unittest "$ROOT_DIR/tests/test_production_security.py"
 python3 -m unittest "$ROOT_DIR/tests/test_security_surface.py"

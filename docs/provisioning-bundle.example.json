@@ -7,6 +7,7 @@
     "password": "replace-with-unique-secret"
   },
   "ota_password": "replace-with-unique-secret",
+  "remote_management_enabled": false,
   "upload": {
     "protocol": "https",
     "host": "app-dev.apexilabs.com",

@@ -12,6 +12,7 @@
 #endif
 
 #include "AppConfig.h"
+#include "AppBearerRotation.h"
 #include "RemoteConfig.h"
 #include "StoreForwardQueue.h"
 #include "Types.h"
@@ -23,7 +24,8 @@ class LiveUpload {
   bool begin(const AppConfig::UploadConfig &config,
              bool enabled,
              bool remoteManagementEnabled,
-             uint32_t appliedConfigVersion);
+             uint32_t appliedConfigVersion,
+             AppBearerRotation *bearerRotation = nullptr);
   void loop();
   bool publishIfDue(const AppState &state);
 
@@ -65,11 +67,15 @@ class LiveUpload {
   bool publishSnapshot(const AppState &state);
   bool queueSnapshot(const AppState &state);
   bool replayQueuedSnapshot();
-  bool postHttps(const char *kind, const String &payload, String *responseBody = nullptr);
+  bool postHttps(const char *kind,
+                 const String &payload,
+                 String *responseBody = nullptr,
+                 const char *bearer = nullptr);
   void consumeHttpsDesiredConfig(const String &responseBody);
   void handleMqttMessage(char *topic, uint8_t *payload, unsigned int length);
   bool parseRemoteConfig(const uint8_t *payload, unsigned int length, RemoteConfig &config);
   bool consumeDesiredState(const uint8_t *payload, unsigned int length);
+  bool parseCredentialRotation(JsonObjectConst rotation);
   bool parseAssignment(JsonObjectConst assignment);
   void rotatePairingCode(uint32_t nowMs);
   String liveTopic() const;
@@ -125,4 +131,5 @@ class LiveUpload {
   int lastHttpStatus_ = 0;
   bool lastPostRetryable_ = false;
   StoreForwardQueue storeForwardQueue_;
+  AppBearerRotation *bearerRotation_ = nullptr;
 };

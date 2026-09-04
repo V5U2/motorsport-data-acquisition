@@ -79,6 +79,7 @@ bool DeviceProvisioning::begin(const AppConfig::WifiConfig &wifiDefaults,
     appDeviceToken_ = owner.getString("app_token", "");
     appTokenSubject_ = owner.getString("app_subject", "");
     provisionedAt_ = owner.getString("prov_at", "");
+    remoteManagementEnabled_ = owner.getBool("remote_mgmt", false);
     status_ = "provisioned";
   } else {
     // Production ESP32 images never inherit owner credentials compiled for a
@@ -175,6 +176,12 @@ bool DeviceProvisioning::acceptSerialCommand(const String &line) {
   candidate.appTokenSubject = document["upload"]["app_token_subject"] | "";
   candidate.hardwareRevision = document["hardware_revision"] | "";
   candidate.provisionedAt = document["provisioned_at"] | "";
+  if (!document["remote_management_enabled"].isNull() &&
+      !document["remote_management_enabled"].is<bool>()) {
+    lastError_ = "remote_management_enabled must be boolean";
+    return false;
+  }
+  const bool remoteManagementEnabled = document["remote_management_enabled"] | false;
 
   std::string validationError;
   if (!ProvisioningPolicy::validate(candidate, deviceId_.c_str(), validationError)) {
@@ -225,6 +232,7 @@ bool DeviceProvisioning::acceptSerialCommand(const String &line) {
     saved = saved && owner.putString("app_subject", candidate.appTokenSubject.c_str()) > 0;
   }
   saved = saved && owner.putString("prov_at", candidate.provisionedAt.c_str()) > 0;
+  saved = saved && owner.putBool("remote_mgmt", remoteManagementEnabled) > 0;
   saved = saved && owner.putBool("ready", true) > 0;
   owner.end();
 
@@ -273,6 +281,7 @@ const char *DeviceProvisioning::provisionedAt() const { return provisionedAt_.c_
 const char *DeviceProvisioning::status() const { return status_.c_str(); }
 const char *DeviceProvisioning::lastError() const { return lastError_.c_str(); }
 bool DeviceProvisioning::isProvisioned() const { return provisioned_; }
+bool DeviceProvisioning::remoteManagementEnabled() const { return remoteManagementEnabled_; }
 
 void DeviceProvisioning::bindConfigs() {
   wifi_.stationSsid = wifiSsid_.c_str();
@@ -303,4 +312,5 @@ void DeviceProvisioning::clearOwnerValues() {
   appDeviceToken_.clear();
   appTokenSubject_.clear();
   provisionedAt_.clear();
+  remoteManagementEnabled_ = false;
 }
