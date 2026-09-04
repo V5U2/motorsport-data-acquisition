@@ -43,6 +43,10 @@ Primary source files:
 5. Build and upload with `pio run -t upload --upload-port /dev/cu.usbserial-10`, replacing the port when needed.
 6. Open the serial monitor at 115200 baud with `pio device monitor`. If a CH340-based board stays in reset, open the port with DTR and RTS inactive or press the board's `RST` button once.
 
+## Release artifacts
+
+Tagged releases publish separate NodeMCU and ESP32 application binaries, ELF files, and an ESP32 16 MB factory image. Each release also contains `build-metadata.json`, which records the tag, commit, PlatformIO environments, flash sizes, partition layouts, and artifact names, plus `SHA256SUMS` covering every published firmware and metadata file. The workflow refuses to overwrite existing assets and downloads the exact publication for a second checksum and byte-for-byte verification. Verify the checksum before flashing and select only the artifact whose target and flash layout match the physical board. See [Firmware releases and rollback](docs/releases.md) for promotion, emergency publication, and rollback rehearsal.
+
 ## Wi-Fi firmware updates
 
 The ESP8266 supports password-protected Arduino OTA updates while connected in station mode. Set a strong, unique `APEXI_OTA_PASSWORD` in the ignored `include/AppSecrets.h`; OTA remains locked when that value is empty. The local `/api/live` response reports `ota_enabled` and `ota_ready` so update availability can be checked without exposing the password.

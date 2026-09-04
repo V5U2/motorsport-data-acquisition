@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
   workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing SemVer tag to publish or verify (for example v0.2.1)
+        required: true
+        type: string
 
 permissions:
   contents: write
@@ -12,10 +17,30 @@ permissions:
 jobs:
   release-firmware:
     runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
 
     steps:
       - name: Check out repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Validate immutable release identity
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Release tag must match vMAJOR.MINOR.PATCH: $RELEASE_TAG" >&2
+            exit 1
+          fi
+          tagged_commit="$(git rev-list -n 1 "$RELEASE_TAG")"
+          checked_out_commit="$(git rev-parse HEAD)"
+          if [[ -z "$tagged_commit" || "$tagged_commit" != "$checked_out_commit" ]]; then
+            echo "Checked-out commit does not match $RELEASE_TAG" >&2
+            exit 1
+          fi
+          echo "RELEASE_COMMIT=$checked_out_commit" >> "$GITHUB_ENV"
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -56,13 +81,55 @@ jobs:
             0x8000 .pio/build/esp32dev/partitions.bin \
             0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
             0x10000 .pio/build/esp32dev/firmware.bin
+          jq --null-input \
+            --arg version "$RELEASE_TAG" \
+            --arg commit "$RELEASE_COMMIT" \
+            '{schema_version: 1, version: $version, commit_sha: $commit, targets: [{environment: "nodemcuv2", flash_size: "4MB", partition_layout: "framework default", firmware: "motorsport-data-acquisition-nodemcuv2-firmware.bin", elf: "motorsport-data-acquisition-nodemcuv2-firmware.elf"}, {environment: "esp32dev", flash_size: "16MB", partition_layout: "partitions/esp32-16mb-store-forward.csv", firmware: "motorsport-data-acquisition-esp32dev-firmware.bin", elf: "motorsport-data-acquisition-esp32dev-firmware.elf", factory_image: "motorsport-data-acquisition-esp32dev-factory.bin"}]}' \
+            > dist/build-metadata.json
+          (
+            cd dist
+            sha256sum \
+              motorsport-data-acquisition-nodemcuv2-firmware.bin \
+              motorsport-data-acquisition-nodemcuv2-firmware.elf \
+              motorsport-data-acquisition-esp32dev-firmware.bin \
+              motorsport-data-acquisition-esp32dev-firmware.elf \
+              motorsport-data-acquisition-esp32dev-factory.bin \
+              build-metadata.json \
+              > SHA256SUMS
+          )
+
+      - name: Verify prepared release assets
+        run: |
+          set -euo pipefail
+          (cd dist && sha256sum --check SHA256SUMS)
+          test "$(jq -r .version dist/build-metadata.json)" = "$RELEASE_TAG"
+          test "$(jq -r .commit_sha dist/build-metadata.json)" = "$RELEASE_COMMIT"
+          test "$(jq '.targets | length' dist/build-metadata.json)" -eq 2
+          test ! -e include/AppSecrets.h
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
+          fail_on_unmatched_files: true
+          overwrite_files: false
           files: |
             dist/motorsport-data-acquisition-nodemcuv2-firmware.bin
             dist/motorsport-data-acquisition-nodemcuv2-firmware.elf
             dist/motorsport-data-acquisition-esp32dev-firmware.bin
             dist/motorsport-data-acquisition-esp32dev-firmware.elf
             dist/motorsport-data-acquisition-esp32dev-factory.bin
+            dist/build-metadata.json
+            dist/SHA256SUMS
+
+      - name: Verify exact published assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          mkdir -p published
+          gh release download "$RELEASE_TAG" --dir published
+          (cd published && sha256sum --check SHA256SUMS)
+          while IFS= read -r artifact; do
+            cmp "dist/$artifact" "published/$artifact"
+          done < <(awk '{print $2}' dist/SHA256SUMS)
