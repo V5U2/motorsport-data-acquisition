@@ -45,7 +45,7 @@ Primary source files:
 
 ## Release artifacts
 
-Tagged releases publish separate NodeMCU and ESP32 application binaries, ELF files, and an ESP32 16 MB factory image. Each release also contains `build-metadata.json`, which records the tag, commit, PlatformIO environments, flash sizes, and ESP32 partition layout, plus `SHA256SUMS` covering every published firmware and metadata file. Verify the checksum before flashing and select only the artifact whose target and flash layout match the physical board.
+Tagged releases publish separate NodeMCU and ESP32 application binaries, ELF files, and an ESP32 16 MB factory image. Each release also contains `build-metadata.json`, which records the tag, commit, PlatformIO environments, flash sizes, partition layouts, and artifact names, plus `SHA256SUMS` covering every published firmware and metadata file. The workflow refuses to overwrite existing assets and downloads the exact publication for a second checksum and byte-for-byte verification. Verify the checksum before flashing and select only the artifact whose target and flash layout match the physical board. See [Firmware releases and rollback](docs/releases.md) for promotion, emergency publication, and rollback rehearsal.
 
 ## Wi-Fi firmware updates
 

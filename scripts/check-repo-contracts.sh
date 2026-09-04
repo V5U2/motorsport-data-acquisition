@@ -28,6 +28,12 @@ grep -q "dist/build-metadata.json" "$ROOT_DIR/.github/workflows/release.yml" || 
   fail "release.yml must publish firmware build metadata"
 grep -q "esp32-16mb-store-forward.csv" "$ROOT_DIR/.github/workflows/release.yml" || \
   fail "release metadata must identify the ESP32 partition layout"
+grep -q "overwrite_files: false" "$ROOT_DIR/.github/workflows/release.yml" || \
+  fail "release workflow must not overwrite immutable firmware assets"
+grep -q "Verify exact published assets" "$ROOT_DIR/.github/workflows/release.yml" || \
+  fail "release workflow must verify the exact published firmware assets"
+grep -q "docs/releases.md" "$ROOT_DIR/README.md" || \
+  fail "README.md must link the firmware release and rollback runbook"
 
 for macro in MDA_PIN_SPI_MISO MDA_PIN_SPI_MOSI MDA_PIN_SPI_SCLK PIN_TFT_CS PIN_TFT_DC PIN_TFT_RST PIN_STATUS_LED; do
   grep -q "#define $macro" "$ROOT_DIR/include/PinDefinitions.h" || fail "missing $macro in include/PinDefinitions.h"
