@@ -20,8 +20,8 @@ constexpr uint16_t kMqttSocketTimeoutSeconds = 1;
 constexpr uint32_t kNetworkClientTimeoutMs = 500;
 constexpr uint32_t kStatusHeartbeatMs = 30000;
 constexpr uint32_t kPairingCodeRefreshMs = 10UL * 60UL * 1000UL;
-constexpr size_t kRemoteConfigJsonCapacity = 1024;
-constexpr size_t kHttpsResponseJsonCapacity = 1536;
+constexpr size_t kRemoteConfigJsonCapacity = 2048;
+constexpr size_t kHttpsResponseJsonCapacity = 3072;
 constexpr uint32_t kHttpsTimeoutMs = 4000;
 constexpr uint8_t kReplayRecordsPerCycle = 2;
 
@@ -71,6 +71,10 @@ bool validRemoteText(const char *value, const size_t maximumLength) {
     }
   }
   return true;
+}
+
+bool validOptionalRemoteText(const char *value, const size_t maximumLength) {
+  return value == nullptr || value[0] == '\0' || validRemoteText(value, maximumLength);
 }
 
 }  // namespace
@@ -453,19 +457,70 @@ void LiveUpload::handleMqttMessage(char *topic, uint8_t *payload, unsigned int l
   if (!remoteManagementEnabled_ || String(topic) != desiredConfigTopic()) {
     return;
   }
-  RemoteConfig candidate{};
-  if (!parseRemoteConfig(payload, length, candidate)) {
+  if (!consumeDesiredState(payload, length)) {
     managementStatus_ = "rejected";
-    managementError_ = "Invalid desired configuration";
-    return;
+    managementError_ = "Invalid desired management state";
   }
-  if (candidate.version <= appliedConfigVersion_) {
-    return;
+}
+
+bool LiveUpload::consumeDesiredState(const uint8_t *payload, const unsigned int length) {
+  if (length == 0 || length > kRemoteConfigJsonCapacity) {
+    return false;
   }
-  pendingRemoteConfig_ = candidate;
-  hasPendingRemoteConfig_ = true;
-  managementStatus_ = "pending";
+  StaticJsonDocument<kRemoteConfigJsonCapacity> document;
+  if (deserializeJson(document, payload, length) != DeserializationError::Ok ||
+      document["schema_version"].as<int>() != 1 ||
+      String(document["device_id"].as<const char *>()) != deviceId_) {
+    return false;
+  }
+  const uint32_t version = document["config_version"].as<uint32_t>();
+  RemoteConfig candidate{};
+  if (version > appliedConfigVersion_) {
+    if (!parseRemoteConfig(payload, length, candidate)) {
+      return false;
+    }
+  }
+  if (!parseAssignment(document["assignment"].as<JsonObjectConst>())) {
+    return false;
+  }
+  if (version > appliedConfigVersion_) {
+    pendingRemoteConfig_ = candidate;
+    hasPendingRemoteConfig_ = true;
+    managementStatus_ = "pending";
+  } else {
+    managementStatus_ = "applied";
+  }
   managementError_ = "";
+  return true;
+}
+
+bool LiveUpload::parseAssignment(const JsonObjectConst assignment) {
+  if (assignment.isNull()) {
+    return false;
+  }
+  const String status = String(assignment["status"].as<const char *>());
+  if (!Logic::isValidRecorderAssignmentStatus(status.c_str())) {
+    return false;
+  }
+  const char *target = assignment["target_session_id"] | "";
+  const char *name = assignment["planned_session_name"] | "";
+  const char *role = assignment["role"] | "";
+  const char *expiresAt = assignment["expires_at"] | "";
+  const char *source = assignment["source_session_id"] | "";
+  const char *recording = assignment["recording_session_id"] | "";
+  if (!validOptionalRemoteText(target, 96) || !validOptionalRemoteText(name, 200) ||
+      !validOptionalRemoteText(role, 16) || !validOptionalRemoteText(expiresAt, 64) ||
+      !validOptionalRemoteText(source, 96) || !validOptionalRemoteText(recording, 96)) {
+    return false;
+  }
+  assignmentTargetSessionId_ = target;
+  assignmentPlannedSessionName_ = name;
+  assignmentStatus_ = status;
+  assignmentRole_ = role;
+  assignmentExpiresAt_ = expiresAt;
+  assignmentSourceSessionId_ = source;
+  assignmentRecordingSessionId_ = recording;
+  return true;
 }
 
 bool LiveUpload::parseRemoteConfig(const uint8_t *payload,
@@ -650,15 +705,11 @@ void LiveUpload::consumeHttpsDesiredConfig(const String &responseBody) {
   }
   String encoded;
   serializeJson(document["desired_config"], encoded);
-  RemoteConfig candidate{};
-  if (!parseRemoteConfig(reinterpret_cast<const uint8_t *>(encoded.c_str()), encoded.length(), candidate) ||
-      candidate.version <= appliedConfigVersion_) {
-    return;
+  if (!consumeDesiredState(
+          reinterpret_cast<const uint8_t *>(encoded.c_str()), encoded.length())) {
+    managementStatus_ = "rejected";
+    managementError_ = "Invalid desired management state";
   }
-  pendingRemoteConfig_ = candidate;
-  hasPendingRemoteConfig_ = true;
-  managementStatus_ = "pending";
-  managementError_ = "";
 }
 
 String LiveUpload::liveTopic() const {
@@ -702,6 +753,14 @@ String LiveUpload::buildStatusJson(const bool connected) const {
     json += "\"ntp_secondary\":\"" + jsonEscape(reportedNtpSecondary_) + "\",";
     json += "\"tz_rule\":\"" + jsonEscape(reportedTimeZoneRule_) + "\",";
     json += "\"tz_label\":\"" + jsonEscape(reportedTimeZoneLabel_) + "\"}";
+    json += ",\"assignment\":{";
+    json += "\"target_session_id\":\"" + jsonEscape(assignmentTargetSessionId_) + "\",";
+    json += "\"planned_session_name\":\"" + jsonEscape(assignmentPlannedSessionName_) + "\",";
+    json += "\"status\":\"" + jsonEscape(assignmentStatus_) + "\",";
+    json += "\"role\":\"" + jsonEscape(assignmentRole_) + "\",";
+    json += "\"expires_at\":\"" + jsonEscape(assignmentExpiresAt_) + "\",";
+    json += "\"source_session_id\":\"" + jsonEscape(assignmentSourceSessionId_) + "\",";
+    json += "\"recording_session_id\":\"" + jsonEscape(assignmentRecordingSessionId_) + "\"}";
     json += "}";
   }
   json += "}";

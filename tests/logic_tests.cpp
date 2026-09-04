@@ -99,6 +99,14 @@ void testHttpRetryPolicy() {
               "discards permanently invalid queued payloads");
   expectEqual(Logic::shouldDiscardQueuedHttpStatus(503), 0,
               "retains queued payloads during server outages");
+  expectEqual(Logic::isValidRecorderAssignmentStatus("armed"), 1,
+              "accepts armed recorder assignment");
+  expectEqual(Logic::isValidRecorderAssignmentStatus("claimed"), 1,
+              "accepts claimed recorder assignment");
+  expectEqual(Logic::isValidRecorderAssignmentStatus("expired"), 1,
+              "accepts expired recorder assignment");
+  expectEqual(Logic::isValidRecorderAssignmentStatus("recording"), 0,
+              "rejects unknown recorder assignment state");
 }
 
 void testTimestampFormatting() {
