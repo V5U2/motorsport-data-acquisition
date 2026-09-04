@@ -8,7 +8,7 @@
 namespace {
 
 constexpr uint32_t kMetadataMagic = 0x5346514DUL;
-constexpr uint16_t kMetadataVersion = 1;
+constexpr uint16_t kMetadataVersion = 2;
 constexpr uint32_t kRecordMagic = 0x53465131UL;
 constexpr size_t kMaximumPayloadBytes = 4096;
 constexpr size_t kFilesystemReserveBytes = 512UL * 1024UL;
@@ -17,6 +17,16 @@ constexpr char kMetadataTemporaryPath[] = "/sfq.meta.tmp";
 constexpr char kSegmentRepairPath[] = "/sfq.repair.tmp";
 constexpr char kSegmentZeroPath[] = "/sfq-0.log";
 constexpr char kSegmentOnePath[] = "/sfq-1.log";
+
+struct LegacyMetadataV1 {
+  uint32_t magic;
+  uint16_t version;
+  uint8_t activeSegment;
+  uint8_t reserved;
+  uint32_t head[2];
+  uint32_t droppedRecords;
+  uint32_t checksum;
+};
 
 }  // namespace
 #endif
@@ -60,6 +70,14 @@ bool StoreForwardQueue::begin(const bool enabled, const size_t maximumBytes) {
     metadata_.magic = kMetadataMagic;
     metadata_.version = kMetadataVersion;
     metadata_.activeSegment = 0;
+    for (uint8_t segment = 0; segment < 2; ++segment) {
+      File quarantine = LittleFS.open(quarantinePath(segment), FILE_READ);
+      if (quarantine && quarantine.size() > 0) {
+        ++metadata_.corruptionEvents;
+        metadata_.quarantinedBytes += quarantine.size();
+      }
+      quarantine.close();
+    }
   }
   for (uint8_t segment = 0; segment < 2; ++segment) {
     if (!scanSegment(segment)) {
@@ -84,6 +102,10 @@ bool StoreForwardQueue::enqueue(const String &payload) {
     return false;
   }
   const size_t recordBytes = sizeof(RecordHeader) + payload.length();
+  if (recordBytes > segmentMaximumBytes_) {
+    lastError_ = "Queued payload exceeds segment capacity";
+    return false;
+  }
   if (tail_[metadata_.activeSegment] + recordBytes > segmentMaximumBytes_ && !rotateSegment()) {
     return false;
   }
@@ -174,16 +196,27 @@ bool StoreForwardQueue::pop(const bool discarded) {
     return false;
   }
   file.close();
+  const uint32_t previousHead = metadata_.head[segment];
+  const uint32_t previousCount = count_[segment];
+  const uint32_t previousDroppedRecords = metadata_.droppedRecords;
   metadata_.head[segment] += sizeof(header) + header.length;
   --count_[segment];
   if (discarded) {
     ++metadata_.droppedRecords;
   }
-  if (count_[segment] == 0 && !truncateSegment(segment)) {
+  // Commit the acknowledgement before reclaiming the segment. If power is
+  // lost or metadata persistence fails, the record remains available for
+  // at-least-once replay instead of being silently erased.
+  if (!saveMetadata()) {
+    metadata_.head[segment] = previousHead;
+    count_[segment] = previousCount;
+    metadata_.droppedRecords = previousDroppedRecords;
     return false;
   }
-  if (!saveMetadata()) {
-    return false;
+  if (count_[segment] == 0) {
+    if (!truncateSegment(segment) || !saveMetadata()) {
+      return false;
+    }
   }
   lastError_ = "";
   return true;
@@ -225,6 +258,22 @@ uint32_t StoreForwardQueue::droppedRecords() const {
 #endif
 }
 
+uint32_t StoreForwardQueue::corruptionEvents() const {
+#if defined(ESP32)
+  return metadata_.corruptionEvents;
+#else
+  return 0;
+#endif
+}
+
+size_t StoreForwardQueue::quarantinedBytes() const {
+#if defined(ESP32)
+  return metadata_.quarantinedBytes;
+#else
+  return 0;
+#endif
+}
+
 String StoreForwardQueue::lastError() const { return lastError_; }
 
 #if defined(ESP32)
@@ -245,14 +294,38 @@ const char *StoreForwardQueue::segmentPath(const uint8_t segment) {
   return segment == 0 ? kSegmentZeroPath : kSegmentOnePath;
 }
 
+const char *StoreForwardQueue::quarantinePath(const uint8_t segment) {
+  return segment == 0 ? "/sfq-0.corrupt" : "/sfq-1.corrupt";
+}
+
 bool StoreForwardQueue::loadMetadata() {
   File file = LittleFS.open(kMetadataPath, FILE_READ);
-  if (!file || file.size() != sizeof(Metadata) ||
-      file.read(reinterpret_cast<uint8_t *>(&metadata_), sizeof(metadata_)) != sizeof(metadata_)) {
+  if (!file) {
     return false;
   }
-  return metadata_.magic == kMetadataMagic && metadata_.version == kMetadataVersion &&
-         metadata_.activeSegment < 2 && metadata_.checksum == metadataChecksum(metadata_);
+  if (file.size() == sizeof(Metadata) &&
+      file.read(reinterpret_cast<uint8_t *>(&metadata_), sizeof(metadata_)) == sizeof(metadata_)) {
+    return metadata_.magic == kMetadataMagic && metadata_.version == kMetadataVersion &&
+           metadata_.activeSegment < 2 && metadata_.checksum == metadataChecksum(metadata_);
+  }
+  if (!file.seek(0) || file.size() != sizeof(LegacyMetadataV1)) {
+    return false;
+  }
+  LegacyMetadataV1 legacy{};
+  if (file.read(reinterpret_cast<uint8_t *>(&legacy), sizeof(legacy)) != sizeof(legacy) ||
+      legacy.magic != kMetadataMagic || legacy.version != 1 || legacy.activeSegment >= 2 ||
+      legacy.checksum != checksum(reinterpret_cast<const uint8_t *>(&legacy),
+                                  offsetof(LegacyMetadataV1, checksum))) {
+    return false;
+  }
+  metadata_ = {};
+  metadata_.magic = kMetadataMagic;
+  metadata_.version = kMetadataVersion;
+  metadata_.activeSegment = legacy.activeSegment;
+  metadata_.head[0] = legacy.head[0];
+  metadata_.head[1] = legacy.head[1];
+  metadata_.droppedRecords = legacy.droppedRecords;
+  return true;
 }
 
 bool StoreForwardQueue::saveMetadata() {
@@ -268,7 +341,9 @@ bool StoreForwardQueue::saveMetadata() {
   }
   file.flush();
   file.close();
-  if (LittleFS.exists(kMetadataPath)) LittleFS.remove(kMetadataPath);
+  // LittleFS rename replaces the destination atomically. Keep the previous
+  // metadata in place until that commit so a reset cannot leave only segments
+  // with ambiguous replay heads.
   if (!LittleFS.rename(kMetadataTemporaryPath, kMetadataPath)) {
     lastError_ = "Queue metadata commit failed";
     return false;
@@ -324,6 +399,7 @@ bool StoreForwardQueue::scanSegment(const uint8_t segment) {
   file.close();
   tail_[segment] = offset;
   if (tail_[segment] < fileSize) {
+    const size_t corruptBytes = fileSize - tail_[segment];
     File source = LittleFS.open(segmentPath(segment), FILE_READ);
     if (LittleFS.exists(kSegmentRepairPath)) LittleFS.remove(kSegmentRepairPath);
     File repair = LittleFS.open(kSegmentRepairPath, FILE_WRITE);
@@ -336,14 +412,28 @@ bool StoreForwardQueue::scanSegment(const uint8_t segment) {
       repaired = read == chunk && repair.write(buffer, chunk) == chunk;
       remaining -= chunk;
     }
+    File quarantine = LittleFS.open(quarantinePath(segment), FILE_APPEND);
+    remaining = corruptBytes;
+    while (repaired && remaining > 0) {
+      const size_t chunk = min(remaining, static_cast<uint32_t>(sizeof(buffer)));
+      const size_t read = source.read(buffer, chunk);
+      repaired = quarantine && read == chunk && quarantine.write(buffer, chunk) == chunk;
+      remaining -= chunk;
+    }
     repair.flush();
+    quarantine.flush();
     source.close();
     repair.close();
-    if (!repaired || !LittleFS.remove(segmentPath(segment)) ||
-        !LittleFS.rename(kSegmentRepairPath, segmentPath(segment))) {
+    quarantine.close();
+    // Replace the live segment only after both the valid prefix and corrupt
+    // suffix are durable. The previous segment remains intact if rename fails.
+    if (!repaired || !LittleFS.rename(kSegmentRepairPath, segmentPath(segment))) {
       lastError_ = "Queue tail repair failed";
       return false;
     }
+    ++metadata_.corruptionEvents;
+    metadata_.quarantinedBytes += corruptBytes;
+    lastError_ = "Queue tail corruption quarantined";
   }
   if (count_[segment] == 0) {
     return truncateSegment(segment);
@@ -353,7 +443,17 @@ bool StoreForwardQueue::scanSegment(const uint8_t segment) {
 
 bool StoreForwardQueue::rotateSegment() {
   const uint8_t next = metadata_.activeSegment == 0 ? 1 : 0;
-  metadata_.droppedRecords += count_[next];
+  const uint32_t recordsToDrop = count_[next];
+  if (recordsToDrop > 0) {
+    metadata_.droppedRecords += recordsToDrop;
+    // Record the capacity loss before reclaiming its bytes. A reset can then
+    // either replay the still-present segment or observe the committed drop;
+    // it cannot silently erase records without incrementing the counter.
+    if (!saveMetadata()) {
+      metadata_.droppedRecords -= recordsToDrop;
+      return false;
+    }
+  }
   if (!truncateSegment(next)) {
     return false;
   }

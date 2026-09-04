@@ -309,6 +309,12 @@ size_t LiveUpload::storeForwardCapacityBytes() const { return storeForwardQueue_
 uint32_t LiveUpload::storeForwardDroppedRecords() const {
   return storeForwardQueue_.droppedRecords();
 }
+uint32_t LiveUpload::storeForwardCorruptionEvents() const {
+  return storeForwardQueue_.corruptionEvents();
+}
+size_t LiveUpload::storeForwardQuarantinedBytes() const {
+  return storeForwardQueue_.quarantinedBytes();
+}
 String LiveUpload::storeForwardError() const { return storeForwardQueue_.lastError(); }
 
 String LiveUpload::pairingCode() const {

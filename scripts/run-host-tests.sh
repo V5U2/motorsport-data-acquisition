@@ -13,3 +13,13 @@ mkdir -p "$BUILD_DIR"
   -o "$BUILD_DIR/logic_tests"
 
 "$BUILD_DIR/logic_tests"
+
+/usr/bin/c++ -std=c++17 -Wall -Wextra -Werror -DESP32 \
+  -I"$ROOT_DIR/tests/fakes" \
+  -I"$ROOT_DIR/include" \
+  "$ROOT_DIR/tests/fakes/LittleFS.cpp" \
+  "$ROOT_DIR/src/StoreForwardQueue.cpp" \
+  "$ROOT_DIR/tests/store_forward_queue_tests.cpp" \
+  -o "$BUILD_DIR/store_forward_queue_tests"
+
+"$BUILD_DIR/store_forward_queue_tests"

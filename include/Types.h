@@ -59,6 +59,8 @@ struct SystemStatus {
   size_t storeForwardPendingBytes;
   size_t storeForwardCapacityBytes;
   uint32_t storeForwardDroppedRecords;
+  uint32_t storeForwardCorruptionEvents;
+  size_t storeForwardQuarantinedBytes;
   String storeForwardError;
 };
 
