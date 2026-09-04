@@ -125,7 +125,15 @@ def commission_identity(
         existing = next(
             (entry for entry in devices if entry.get("device_id") == observed_device_id), None
         )
+        if existing is not None and existing.get("status") == "pending":
+            existing["status"] = "indeterminate"
+            _write_inventory(inventory_path, inventory)
         if existing is not None and not reprovision:
+            if existing.get("status") == "indeterminate":
+                raise ProvisioningError(
+                    f"identity {observed_device_id} has an indeterminate prior attempt; "
+                    "inspect the device before using --reprovision"
+                )
             raise ProvisioningError(
                 f"duplicate identity {observed_device_id} already exists; "
                 "use --reprovision only after ownership checks"

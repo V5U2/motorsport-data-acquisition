@@ -126,6 +126,30 @@ class ProvisionDeviceTests(unittest.TestCase):
             entry = json.loads(path.read_text())["devices"][0]
             self.assertEqual(entry["status"], "indeterminate")
 
+    def test_crash_left_pending_is_reported_as_indeterminate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "inventory.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "devices": [
+                            {
+                                "device_id": "mda-aabbccddeeff",
+                                "friendly_name": "Workshop logger",
+                                "hardware_revision": "esp32-wroom-32",
+                                "provisioned_at": "2026-09-05T00:00:00+00:00",
+                                "status": "pending",
+                            }
+                        ]
+                    }
+                )
+            )
+            with self.assertRaisesRegex(provision_device.ProvisioningError, "indeterminate"):
+                provision_device.commission_identity(
+                    path, "mda-aabbccddeeff", bundle(), False, lambda _: None
+                )
+            self.assertEqual(json.loads(path.read_text())["devices"][0]["status"], "indeterminate")
+
 
 if __name__ == "__main__":
     unittest.main()
