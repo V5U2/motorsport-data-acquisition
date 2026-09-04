@@ -1,5 +1,7 @@
 # Hardware Setup
 
+This document describes supported wiring and current firmware assumptions. It is not evidence that a specific assembly is production-qualified. Use the [production hardware qualification plan](production-hardware-qualification.md) to record the exact board/BOM, validate the as-built pinout, calibrate each channel, and capture power, RTC, environmental, outage, and soak results.
+
 ## Core modules
 - MCU: NodeMCU 1.0 / ESP-12E DevKit V2 (`nodemcuv2`) or classic ESP32 DevKit / ESP32-WROOM-32 (`esp32dev`)
 - ADC: ADS1115 on I2C, using the Adafruit ADA1085 board
@@ -189,3 +191,4 @@ When using receiver modules:
 5. Set the RTC to the correct time before field logging.
 6. Inject 4, 8, 12, 16, and 20 mA into each channel and verify the receiver modules and displayed engineering units match the configured ranges.
 7. Confirm the serial boot report shows `wifiReady=1`, station mode, and a DHCP address before installing the logger in the vehicle.
+8. For a production assembly, complete the [qualification release gate](production-hardware-qualification.md) and retain the result CSVs with the hardware revision and firmware artifact.

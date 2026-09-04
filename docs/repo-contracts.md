@@ -16,6 +16,7 @@ This repo uses a small set of source-of-truth files for the important facts, and
 | Onboard store-and-forward | [`include/StoreForwardQueue.h`](../include/StoreForwardQueue.h), [`src/StoreForwardQueue.cpp`](../src/StoreForwardQueue.cpp), [`partitions/esp32-16mb-store-forward.csv`](../partitions/esp32-16mb-store-forward.csv), [`docs/store-forward-recovery.md`](store-forward-recovery.md) | ESP32 LittleFS queue format, rotation/recovery policy, capacity, and flash partition ownership |
 | Live transport payload schema version | [`include/Logic.h`](../include/Logic.h) | `Logic::kLivePayloadSchemaVersion` is the canonical version emitted in MQTT and HTTPS live/status payloads |
 | Wiring, detailed BOM, commissioning guidance, pin table | [`docs/hardware-setup.md`](./hardware-setup.md) | Human-oriented hardware source of truth |
+| Production hardware qualification plan and evidence schemas | [`docs/production-hardware-qualification.md`](./production-hardware-qualification.md), [`fixtures/qualification/`](../fixtures/qualification/) | Separates configured assumptions from physical acceptance evidence; blank templates never imply qualification |
 | Project overview, build entrypoints, verification entrypoints | [`README.md`](../README.md) | Summary only; should link to owning docs instead of duplicating them |
 | Agent workflow expectations | [`AGENTS.md`](../AGENTS.md) | Operational guidance and pointers, not a second source of hardware truth |
 | Host-test entrypoint | [`scripts/run-host-tests.sh`](../scripts/run-host-tests.sh) | Canonical fast logic-test command |
@@ -36,6 +37,7 @@ Use for quick local checks and CI contract validation:
 This must run:
 - host logic tests
 - repo contract checks
+- qualification record schema checks
 
 ### Full path
 

@@ -19,7 +19,7 @@ Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and das
 
 This project targets a NodeMCU 1.0 / ESP-12E DevKit V2 logger with external 4-20 mA receiver modules. The supported default uses a 0-8 bar pressure transmitter through a DFRobot SEN0262 into ADS1115 channel A0 and a 0-150 degrees Celsius temperature transmitter through a second SEN0262 into channel A1. Field transmitters are ordered for direct operation from the protected 12 V vehicle supply; the 24 V boost path is only a fallback when a transmitter cannot meet its loop compliance requirement at 12 V.
 
-For the detailed BOM, pin table, wiring guidance, and commissioning steps, see [docs/hardware-setup.md](docs/hardware-setup.md).
+For the detailed BOM, pin table, wiring guidance, and commissioning steps, see [docs/hardware-setup.md](docs/hardware-setup.md). Production acceptance is tracked separately in the [hardware qualification plan](docs/production-hardware-qualification.md); the current hardware remains unqualified until its physical evidence and approval fields are complete.
 
 Primary source files:
 - board target: [`platformio.ini`](platformio.ini)
@@ -36,6 +36,7 @@ Primary source files:
 - [`src/LiveUpload.cpp`](src/LiveUpload.cpp)
 - [`docs/hardware-setup.md`](docs/hardware-setup.md)
 - [`docs/repo-contracts.md`](docs/repo-contracts.md)
+- [`docs/production-hardware-qualification.md`](docs/production-hardware-qualification.md)
 
 ## Build and flash
 1. Install PlatformIO Core or use the PlatformIO VS Code extension.
