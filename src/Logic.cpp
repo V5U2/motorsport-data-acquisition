@@ -82,6 +82,11 @@ bool shouldDiscardQueuedHttpStatus(const int status) {
   return status == 400 || status == 404 || status == 413 || status == 422;
 }
 
+bool isValidRecorderAssignmentStatus(const std::string_view status) {
+  return status == "unassigned" || status == "armed" || status == "claimed" ||
+         status == "finished" || status == "revoked" || status == "expired";
+}
+
 std::string fallbackTimestamp(const uint32_t uptimeMs) {
   return "boot+" + std::to_string(uptimeMs);
 }

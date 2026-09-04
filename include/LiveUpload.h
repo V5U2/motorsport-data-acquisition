@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <ArduinoJson.h>
 #include <PubSubClient.h>
 #include <WiFiClient.h>
 #if defined(ESP8266)
@@ -63,6 +64,8 @@ class LiveUpload {
   void consumeHttpsDesiredConfig(const String &responseBody);
   void handleMqttMessage(char *topic, uint8_t *payload, unsigned int length);
   bool parseRemoteConfig(const uint8_t *payload, unsigned int length, RemoteConfig &config);
+  bool consumeDesiredState(const uint8_t *payload, unsigned int length);
+  bool parseAssignment(JsonObjectConst assignment);
   void rotatePairingCode(uint32_t nowMs);
   String liveTopic() const;
   String statusTopic() const;
@@ -101,6 +104,13 @@ class LiveUpload {
   String reportedNtpSecondary_;
   String reportedTimeZoneRule_;
   String reportedTimeZoneLabel_;
+  String assignmentTargetSessionId_;
+  String assignmentPlannedSessionName_;
+  String assignmentStatus_ = "unassigned";
+  String assignmentRole_;
+  String assignmentExpiresAt_;
+  String assignmentSourceSessionId_;
+  String assignmentRecordingSessionId_;
   RemoteConfig pendingRemoteConfig_{};
   bool hasPendingRemoteConfig_ = false;
   bool httpsConnected_ = false;
