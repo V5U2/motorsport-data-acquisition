@@ -5,6 +5,11 @@
 #include <time.h>
 #include <Wire.h>
 
+#if defined(ESP32)
+#include <esp_flash_encrypt.h>
+#include <esp_secure_boot.h>
+#endif
+
 #include "AppConfig.h"
 #include "CsvLogger.h"
 #include "Dashboard.h"
@@ -42,6 +47,9 @@ bool rtcNetworkSynced = false;
 bool wifiReady = false;
 bool otaReady = false;
 bool networkTimeConfigured = false;
+bool secureBootEnabled = false;
+bool flashEncryptionEnabled = false;
+bool flashEncryptionReleaseMode = false;
 String rtcLastSync;
 
 uint32_t lastSampleMs = 0;
@@ -120,6 +128,12 @@ AppState buildState() {
   state.system.provisioningStatus = deviceProvisioning.status();
   state.system.provisioningError = deviceProvisioning.lastError();
   state.system.provisionedAt = deviceProvisioning.provisionedAt();
+  state.system.productionSecurityRequired = APEXI_PRODUCTION_SECURITY_REQUIRED != 0;
+  state.system.secureBootEnabled = secureBootEnabled;
+  state.system.flashEncryptionEnabled = flashEncryptionEnabled;
+  state.system.flashEncryptionReleaseMode = flashEncryptionReleaseMode;
+  state.system.productionSecurityReady = Logic::productionSecurityAllowsNetwork(
+      state.system.productionSecurityRequired, secureBootEnabled, flashEncryptionReleaseMode);
   state.system.adcReady = adcReady;
   state.system.displayEnabled = AppConfig::kFeatures.displayEnabled;
   state.system.rtcEnabled = AppConfig::kFeatures.rtcEnabled;
@@ -268,6 +282,12 @@ void setup() {
   pinMode(AppConfig::kPins.buttonPin, INPUT_PULLUP);
 
   deviceProvisioning.begin(AppConfig::kWifi, AppConfig::kOta, AppConfig::kLiveUpload);
+#if defined(ESP32)
+  secureBootEnabled = esp_secure_boot_enabled();
+  flashEncryptionEnabled = esp_flash_encryption_enabled();
+  flashEncryptionReleaseMode =
+      esp_get_flash_encryption_mode() == ESP_FLASH_ENC_MODE_RELEASE;
+#endif
   Serial.print("DEVICE_ID=");
   Serial.println(deviceProvisioning.deviceId());
   Serial.print("PROVISIONING_STATUS=");
@@ -344,12 +364,16 @@ void setup() {
   constexpr bool kProductionEsp32Target = false;
 #endif
   const bool networkAllowed = ProvisioningPolicy::networkAllowed(
-      kProductionEsp32Target, deviceProvisioning.isProvisioned());
+      kProductionEsp32Target, deviceProvisioning.isProvisioned()) &&
+      Logic::productionSecurityAllowsNetwork(APEXI_PRODUCTION_SECURITY_REQUIRED != 0,
+                                             secureBootEnabled,
+                                             flashEncryptionReleaseMode);
   if (networkAllowed) {
     runtimeSettings.begin(deviceProvisioning.uploadConfig(), AppConfig::kFeatures.liveUploadEnabled);
     wifiReady = webUi.begin(deviceProvisioning.wifiConfig(), csvLogger, runtimeSettings,
                             deviceProvisioning.deviceId(),
-                            deviceProvisioning.otaConfig().password);
+                            deviceProvisioning.otaConfig().password,
+                            AppConfig::kFeatures.localSettingsEnabled);
     liveUpload.begin(runtimeSettings.uploadConfig(),
                      runtimeSettings.liveUploadEnabled(),
                      runtimeSettings.remoteManagementEnabled(),
@@ -364,7 +388,9 @@ void setup() {
                                  deviceProvisioning.provisionedAt());
   } else {
     wifiReady = false;
-    Serial.println("NETWORK_DISABLED=provisioning-required");
+    Serial.println(deviceProvisioning.isProvisioned()
+                       ? "NETWORK_DISABLED=production-security-required"
+                       : "NETWORK_DISABLED=provisioning-required");
   }
   Serial.print("storeForwardReady=");
   Serial.print(liveUpload.storeForwardReady() ? "1" : "0");

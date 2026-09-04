@@ -47,6 +47,9 @@
 #ifndef APEXI_FIRMWARE_VERSION
 #define APEXI_FIRMWARE_VERSION "dev"
 #endif
+#ifndef APEXI_PRODUCTION_SECURITY_REQUIRED
+#define APEXI_PRODUCTION_SECURITY_REQUIRED 0
+#endif
 
 namespace AppConfig {
 
@@ -97,6 +100,7 @@ struct WifiConfig {
   const char *stationSsid;
   const char *stationPassword;
   uint8_t connectTimeoutSeconds;
+  bool fallbackApEnabled;
 };
 
 struct FeatureConfig {
@@ -105,6 +109,7 @@ struct FeatureConfig {
   bool sdLoggingEnabled;
   bool liveUploadEnabled;
   bool otaUpdatesEnabled;
+  bool localSettingsEnabled;
 };
 
 struct OtaConfig {
@@ -229,6 +234,11 @@ inline constexpr WifiConfig kWifi{
     APEXI_WIFI_STATION_SSID,
     APEXI_WIFI_STATION_PASSWORD,
     30,
+#if defined(ESP32)
+    false,
+#else
+    true,
+#endif
 };
 
 inline constexpr FeatureConfig kFeatures{
@@ -240,7 +250,13 @@ inline constexpr FeatureConfig kFeatures{
     true,
 #endif
     true,
+#if defined(ESP32)
+    false,
+    false,
+#else
     true,
+    true,
+#endif
 };
 
 inline constexpr OtaConfig kOta{

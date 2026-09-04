@@ -2,6 +2,8 @@
 
 Firmware releases are immutable builds of an existing `vMAJOR.MINOR.PATCH` tag. Release Please creates the version commit, tag, changelog and GitHub Release from protected `main`; the tag-triggered `release-firmware` workflow builds and attaches the board-specific artifacts.
 
+The current workflow publishes development artifacts, not production-approved firmware. SHA-256 proves download integrity but is not a boot signature. ESP8266 is not a production target, and the current precompiled ESP32 Arduino SDK does not enable Secure Boot or flash encryption. See [ESP32 production security and recovery](production-security.md). A future production workflow must compile `APEXI_PRODUCTION_SECURITY_REQUIRED=1`, pass `scripts/check_production_security.py --require-production`, sign the bootloader/application outside the repository, and attach the non-secret security classification to release evidence.
+
 ## Promotion
 
 1. Merge conventional commits to `main` only after required verification passes.
@@ -25,7 +27,7 @@ Rollback is a forward operational action using the prior known-good release; tag
 
 1. Record the current logger version, board/flash layout, and queue diagnostics. Preserve or drain queued telemetry before changing the partition.
 2. Download the prior release's `SHA256SUMS`, metadata, and matching firmware artifact. Verify all checksums and confirm its target/layout.
-3. For NodeMCU, upload the matching application binary with the documented serial or OTA procedure. For ESP32, use the application binary only when the installed partition layout is already compatible; otherwise use the matching factory image after explicitly accepting that a full flash operation can erase settings and queued data.
+3. For development NodeMCU, upload the matching application binary with the documented serial or OTA procedure. For ESP32 development hardware, use the application binary only when the installed partition layout is already compatible; otherwise use the matching factory image after explicitly accepting that a full flash operation can erase settings and queued data. Production rollback must use a signed image accepted by Secure Boot and the governed security-version policy.
 4. Re-run the commissioning checklist, verify the local version and live sequence, and confirm ingestion in the telemetry app.
 5. Record the rollback release, device ID, reason, verification result, and whether queue data was preserved.
 

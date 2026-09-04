@@ -26,6 +26,8 @@ grep -q "dist/SHA256SUMS" "$ROOT_DIR/.github/workflows/release.yml" || \
   fail "release.yml must publish release checksums"
 grep -q "dist/build-metadata.json" "$ROOT_DIR/.github/workflows/release.yml" || \
   fail "release.yml must publish firmware build metadata"
+grep -q "dist/esp32-security-classification.json" "$ROOT_DIR/.github/workflows/release.yml" || \
+  fail "release.yml must publish the ESP32 security classification"
 grep -q "esp32-16mb-store-forward.csv" "$ROOT_DIR/.github/workflows/release.yml" || \
   fail "release metadata must identify the ESP32 partition layout"
 grep -q "overwrite_files: false" "$ROOT_DIR/.github/workflows/release.yml" || \
@@ -61,6 +63,10 @@ grep -q "APEXI_OTA_PASSWORD" "$ROOT_DIR/include/AppSecrets.example.h" || \
   fail "include/AppSecrets.example.h must document APEXI_OTA_PASSWORD"
 grep -q "upload_protocol = espota" "$ROOT_DIR/platformio.ini" || \
   fail "platformio.ini must provide the OTA upload environment"
+grep -A8 -q 'APEXI_PRODUCTION_SECURITY_REQUIRED=1' "$ROOT_DIR/platformio.ini" || \
+  fail "production candidate must compile the fail-closed runtime security gate"
+grep -q 'check_production_security.py' "$ROOT_DIR/docs/production-security.md" || \
+  fail "production security runbook must name the machine-checkable audit"
 if git -C "$ROOT_DIR" ls-files --error-unmatch -- include/AppSecrets.h >/dev/null 2>&1; then
   fail "include/AppSecrets.h contains local credentials and must not be tracked"
 fi

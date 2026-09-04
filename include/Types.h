@@ -31,6 +31,11 @@ struct SystemStatus {
   String provisioningStatus;
   String provisioningError;
   String provisionedAt;
+  bool productionSecurityRequired;
+  bool secureBootEnabled;
+  bool flashEncryptionEnabled;
+  bool flashEncryptionReleaseMode;
+  bool productionSecurityReady;
   bool adcReady;
   bool displayEnabled;
   bool rtcEnabled;
