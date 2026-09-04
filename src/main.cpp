@@ -145,6 +145,8 @@ AppState buildState() {
   state.system.storeForwardPendingBytes = liveUpload.storeForwardPendingBytes();
   state.system.storeForwardCapacityBytes = liveUpload.storeForwardCapacityBytes();
   state.system.storeForwardDroppedRecords = liveUpload.storeForwardDroppedRecords();
+  state.system.storeForwardCorruptionEvents = liveUpload.storeForwardCorruptionEvents();
+  state.system.storeForwardQuarantinedBytes = liveUpload.storeForwardQuarantinedBytes();
   state.system.storeForwardError = liveUpload.storeForwardError();
   return state;
 }

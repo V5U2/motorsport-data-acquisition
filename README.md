@@ -69,7 +69,7 @@ The default clock configuration uses `pool.ntp.org`, `time.google.com`, POSIX ti
 
 Dashboard uptime is displayed as `DD:HH:mm:ss`. The live API retains numeric `uptime_ms` for compatibility and also exposes the formatted value as `uptime`.
 
-The ESP32 target uses the checked-in 16 MB partition table: two 2 MB OTA application slots plus an approximately 12 MB LittleFS partition. Store-and-forward is capped at 10 MB and split across two append-only segments; when capacity is exhausted, rotation drops the oldest remaining segment and reports the drop count. Only failed HTTPS snapshots are written, limiting flash wear during normal connected operation. The NodeMCU target keeps its existing 4 MB layout and does not enable this queue.
+The ESP32 target uses the checked-in 16 MB partition table: two 2 MB OTA application slots plus an approximately 12 MB LittleFS partition. Store-and-forward is capped at 10 MB and split across two append-only segments; when capacity is exhausted, rotation drops the oldest remaining segment and reports the drop count. Only failed HTTPS snapshots are written, limiting flash wear during normal connected operation. A mount failure is reported without automatically formatting the partition, preserving queued data for explicit recovery. Invalid tails are checksummed and quarantined before repair, and acknowledgement metadata is committed before an empty segment is reclaimed. The [store-and-forward recovery contract](docs/store-forward-recovery.md) defines format compatibility, interruption outcomes, capacity/endurance estimates, and the destructive recovery procedure. The NodeMCU target keeps its existing 4 MB layout and does not enable this queue.
 
 Production brokers require authentication. Set `APEXI_MQTT_USERNAME` to the same normalized value as `kLiveUpload.deviceId`; the broker ACL uses that identity to limit the device to publishing `<topicPrefix>/<deviceId>/live` and `<topicPrefix>/<deviceId>/status`. When remote management is enabled, it may additionally read only its own `<topicPrefix>/<deviceId>/config/desired` topic. Keep the matching password in the encrypted infrastructure vault and never commit `AppSecrets.h`.
 
@@ -78,7 +78,7 @@ Current behavior:
 - Each message includes `schema_version`, a normalized `device_id`, a per-boot `session_id`, a monotonic `sequence`, the current timestamp, and the current sensor values.
 - The retained MQTT status topic now reflects both online and offline state so downstream consumers do not keep stale liveness.
 - The firmware exposes live upload state through the local web UI and `/api/live`.
-- The ESP32 local UI exposes onboard queue readiness, pending records/bytes, drops, and queue errors.
+- The ESP32 local UI exposes onboard queue readiness, pending records/bytes, drops, corruption repairs, quarantined bytes, and queue errors.
 - Local SD logging remains optional for long-duration/removable CSV archives.
 
 ### Starting and stopping a live session

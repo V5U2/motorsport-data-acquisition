@@ -40,6 +40,8 @@ class LiveUpload {
   size_t storeForwardPendingBytes() const;
   size_t storeForwardCapacityBytes() const;
   uint32_t storeForwardDroppedRecords() const;
+  uint32_t storeForwardCorruptionEvents() const;
+  size_t storeForwardQuarantinedBytes() const;
   String storeForwardError() const;
   String pairingCode() const;
   uint32_t pairingCodeExpiresInSeconds() const;
