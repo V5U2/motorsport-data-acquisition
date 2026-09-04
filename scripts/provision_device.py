@@ -17,44 +17,72 @@ from pathlib import Path
 from typing import Any, Callable, Iterator
 
 DEVICE_ID_PATTERN = re.compile(r"^mda-[0-9a-f]{12}$")
+
+
 class ProvisioningError(ValueError):
     pass
 
 
+class ProvisioningIndeterminate(ProvisioningError):
+    """The device may have committed the record but acknowledgement was lost."""
+
+
+def _text(value: Any, field: str, maximum: int, minimum: int = 1) -> str:
+    if not isinstance(value, str):
+        raise ProvisioningError(f"{field} must be text")
+    if not minimum <= len(value) <= maximum:
+        raise ProvisioningError(f"{field} length must be {minimum}..{maximum}")
+    if any(ord(character) < 0x20 or ord(character) == 0x7F for character in value):
+        raise ProvisioningError(f"{field} contains a control character")
+    return value
+
+
 def validate_bundle(bundle: dict[str, Any], observed_device_id: str) -> dict[str, Any]:
+    if not isinstance(bundle, dict):
+        raise ProvisioningError("bundle must be a JSON object")
     if not DEVICE_ID_PATTERN.fullmatch(observed_device_id) or observed_device_id.endswith(
         "000000000000"
     ):
         raise ProvisioningError("device reported a malformed immutable ID")
     expected = bundle.get("expected_device_id")
+    if expected is not None:
+        _text(expected, "expected_device_id", 16)
     if expected and expected != observed_device_id:
         raise ProvisioningError("expected_device_id does not match the attached device")
     result = dict(bundle)
     result["expected_device_id"] = observed_device_id
-    result.setdefault("provisioned_at", dt.datetime.now(dt.timezone.utc).isoformat())
-    required = ("friendly_name", "hardware_revision", "wifi", "upload", "ota_password")
-    if any(not result.get(field) for field in required):
-        raise ProvisioningError("bundle has blank or missing required fields")
-    wifi = result["wifi"]
-    upload = result["upload"]
-    if not isinstance(wifi, dict) or not wifi.get("ssid") or len(wifi.get("password", "")) < 8:
-        raise ProvisioningError("Wi-Fi credentials are incomplete")
-    if len(result["ota_password"]) < 12:
-        raise ProvisioningError("OTA password must be at least 12 characters")
-    if not isinstance(upload, dict) or upload.get("protocol") not in {"https", "mqtt"}:
+    if "provisioned_at" not in result:
+        result["provisioned_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
+    _text(result.get("friendly_name"), "friendly_name", 63)
+    _text(result.get("hardware_revision"), "hardware_revision", 31)
+    _text(result.get("provisioned_at"), "provisioned_at", 40)
+    _text(result.get("ota_password"), "ota_password", 127, 12)
+    wifi = result.get("wifi")
+    upload = result.get("upload")
+    if not isinstance(wifi, dict):
+        raise ProvisioningError("wifi must be a JSON object")
+    if not isinstance(upload, dict):
+        raise ProvisioningError("upload must be a JSON object")
+    _text(wifi.get("ssid"), "wifi.ssid", 32)
+    _text(wifi.get("password"), "wifi.password", 63, 8)
+    protocol = _text(upload.get("protocol"), "upload.protocol", 5)
+    if protocol not in {"https", "mqtt"}:
         raise ProvisioningError("upload.protocol must be https or mqtt")
-    if not upload.get("host") or not 1 <= int(upload.get("port", 0)) <= 65535:
-        raise ProvisioningError("upload host or port is invalid")
-    if upload["protocol"] == "mqtt":
-        if upload.get("mqtt_username") != observed_device_id:
+    _text(upload.get("host"), "upload.host", 127)
+    port = upload.get("port")
+    if isinstance(port, bool) or not isinstance(port, int) or not 1 <= port <= 65535:
+        raise ProvisioningError("upload.port must be an integer from 1 to 65535")
+    if protocol == "mqtt":
+        mqtt_username = _text(upload.get("mqtt_username"), "upload.mqtt_username", 127)
+        if mqtt_username != observed_device_id:
             raise ProvisioningError("MQTT username must equal the immutable device ID")
-        if not upload.get("mqtt_password"):
-            raise ProvisioningError("MQTT password is required")
+        _text(upload.get("mqtt_password"), "upload.mqtt_password", 127)
     else:
-        for field in ("cloudflare_client_id", "cloudflare_client_secret", "app_device_token"):
-            if not upload.get(field):
-                raise ProvisioningError(f"upload.{field} is required")
-        if upload.get("app_token_subject") != f"logger:{observed_device_id}":
+        _text(upload.get("cloudflare_client_id"), "upload.cloudflare_client_id", 127)
+        _text(upload.get("cloudflare_client_secret"), "upload.cloudflare_client_secret", 127)
+        _text(upload.get("app_device_token"), "upload.app_device_token", 511)
+        app_subject = _text(upload.get("app_token_subject"), "upload.app_token_subject", 80)
+        if app_subject != f"logger:{observed_device_id}":
             raise ProvisioningError("app bearer subject must equal logger:<immutable device ID>")
     return result
 
@@ -119,6 +147,10 @@ def commission_identity(
         _write_inventory(inventory_path, inventory)
         try:
             deliver(metadata)
+        except ProvisioningIndeterminate:
+            existing["status"] = "indeterminate"
+            _write_inventory(inventory_path, inventory)
+            raise
         except Exception:
             if previous is None:
                 devices.remove(existing)
@@ -168,7 +200,9 @@ def provision_serial(
                     return
                 if line.startswith("PROVISIONING_RESULT=rejected"):
                     raise ProvisioningError(line)
-            raise ProvisioningError("logger did not acknowledge the provisioning record")
+            raise ProvisioningIndeterminate(
+                "logger acknowledgement was not received; inventory remains indeterminate"
+            )
 
         commission_identity(inventory_path, observed, bundle, reprovision, deliver)
         return observed

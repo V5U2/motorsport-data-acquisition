@@ -51,6 +51,18 @@ class ProvisionDeviceTests(unittest.TestCase):
         unknown_protocol["upload"]["protocol"] = "ftp"
         with self.assertRaises(provision_device.ProvisioningError):
             provision_device.validate_bundle(unknown_protocol, "mda-aabbccddeeff")
+        malformed_port = bundle()
+        malformed_port["upload"]["port"] = "443"
+        with self.assertRaisesRegex(provision_device.ProvisioningError, "upload.port"):
+            provision_device.validate_bundle(malformed_port, "mda-aabbccddeeff")
+        non_string_secret = bundle()
+        non_string_secret["ota_password"] = ["not", "text"]
+        with self.assertRaisesRegex(provision_device.ProvisioningError, "ota_password"):
+            provision_device.validate_bundle(non_string_secret, "mda-aabbccddeeff")
+        blank_timestamp = bundle()
+        blank_timestamp["provisioned_at"] = ""
+        with self.assertRaisesRegex(provision_device.ProvisioningError, "provisioned_at"):
+            provision_device.validate_bundle(blank_timestamp, "mda-aabbccddeeff")
 
     def test_duplicate_inventory_fails_closed_and_contains_no_secrets(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -95,6 +107,24 @@ class ProvisionDeviceTests(unittest.TestCase):
                     path, "mda-aabbccddeeff", bundle(), False, fail
                 )
             self.assertEqual(json.loads(path.read_text())["devices"], [])
+
+    def test_ambiguous_delivery_retains_indeterminate_reservation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "inventory.json"
+
+            def lose_acknowledgement(_):
+                raise provision_device.ProvisioningIndeterminate("timeout")
+
+            with self.assertRaises(provision_device.ProvisioningIndeterminate):
+                provision_device.commission_identity(
+                    path,
+                    "mda-aabbccddeeff",
+                    bundle(),
+                    False,
+                    lose_acknowledgement,
+                )
+            entry = json.loads(path.read_text())["devices"][0]
+            self.assertEqual(entry["status"], "indeterminate")
 
 
 if __name__ == "__main__":

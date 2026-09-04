@@ -26,7 +26,7 @@ python3 scripts/provision_device.py /secure/path/logger.json \
   --inventory /secure/inventory/loggers.json
 ```
 
-The tool resets the board, reads the identity, checks the complete bundle, writes one `APEXI_PROVISION` record, waits for an accepted response, and then records only ID, friendly name, hardware revision, and timestamp in the inventory. It never prints the bundle or its secrets. The logger restarts after an accepted record.
+The tool resets the board, reads the identity, checks the complete bundle, atomically reserves the ID under an inventory lock, writes one `APEXI_PROVISION` record, waits for an accepted response, and then commits only ID, friendly name, hardware revision, and timestamp in the inventory. It never prints the bundle or its secrets. An explicit delivery failure rolls back the reservation. If acknowledgement is lost after transmission, the entry remains `indeterminate`; inspect the device before using `--reprovision` rather than assuming either outcome. The logger restarts after an accepted record.
 
 After restart, check that serial output reports the expected `DEVICE_ID` and `PROVISIONING_STATUS=provisioned`. Check `/api/live` for the same non-secret ID, friendly name, hardware revision, and provisioning timestamp. Verify station Wi-Fi and the app HTTPS heartbeat. The API and settings page must never contain Wi-Fi, OTA, MQTT, Cloudflare, or app bearer values.
 
