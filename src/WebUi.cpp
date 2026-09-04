@@ -10,11 +10,13 @@ bool WebUi::begin(const AppConfig::WifiConfig &config,
                   CsvLogger &logger,
                   RuntimeSettings &settings,
                   const char *deviceHostname,
-                  const char *settingsPassword) {
+                  const char *settingsPassword,
+                  const bool localSettingsEnabled) {
   logger_ = &logger;
   settings_ = &settings;
   deviceHostname_ = deviceHostname;
   settingsPassword_ = settingsPassword;
+  localSettingsEnabled_ = localSettingsEnabled;
 
   if (config.mode == AppConfig::WifiMode::Station && strlen(config.stationSsid) > 0) {
     WiFi.persistent(false);
@@ -43,6 +45,12 @@ bool WebUi::begin(const AppConfig::WifiConfig &config,
       Serial.print("STA failed status=");
       Serial.println(static_cast<int>(WiFi.status()));
     }
+  }
+
+  if (!ready_ && !config.fallbackApEnabled) {
+    mode_ = "OFF";
+    ipAddress_ = "0.0.0.0";
+    return false;
   }
 
   if (!ready_) {
@@ -130,6 +138,11 @@ void WebUi::handleFilesJson() {
 }
 
 void WebUi::handleSettings() {
+  if (!localSettingsEnabled_) {
+    server_.send(410, "text/plain",
+                 "Local settings are disabled on ESP32. Use identity-bound USB provisioning or optional app management.");
+    return;
+  }
   if (!settingsAuthorized()) {
     return;
   }
@@ -191,6 +204,10 @@ void WebUi::handleSettings() {
 }
 
 void WebUi::handleSettingsSave() {
+  if (!localSettingsEnabled_) {
+    server_.send(410, "text/plain", "Local settings are disabled on ESP32");
+    return;
+  }
   if (!settingsAuthorized()) {
     return;
   }
@@ -320,6 +337,16 @@ String WebUi::liveJson() const {
   json += "\"provisioning_status\":\"" + jsonEscape(state_.system.provisioningStatus) + "\",";
   json += "\"provisioning_error\":\"" + jsonEscape(state_.system.provisioningError) + "\",";
   json += "\"provisioned_at\":\"" + jsonEscape(state_.system.provisionedAt) + "\",";
+  json += "\"production_security_required\":" +
+          String(state_.system.productionSecurityRequired ? "true" : "false") + ",";
+  json += "\"secure_boot_enabled\":" +
+          String(state_.system.secureBootEnabled ? "true" : "false") + ",";
+  json += "\"flash_encryption_enabled\":" +
+          String(state_.system.flashEncryptionEnabled ? "true" : "false") + ",";
+  json += "\"flash_encryption_release_mode\":" +
+          String(state_.system.flashEncryptionReleaseMode ? "true" : "false") + ",";
+  json += "\"production_security_ready\":" +
+          String(state_.system.productionSecurityReady ? "true" : "false") + ",";
   json += "\"adc_ready\":" + String(state_.system.adcReady ? "true" : "false") + ",";
   json += "\"display_enabled\":" + String(state_.system.displayEnabled ? "true" : "false") + ",";
   json += "\"rtc_enabled\":" + String(state_.system.rtcEnabled ? "true" : "false") + ",";
@@ -593,7 +620,7 @@ String WebUi::diagnosticsHtml() const {
   <main><section class="grid">
     <div class="card"><div class="label">Identity &amp; provisioning</div><div class="status detail-row"><span>Logger ID</span><span id="deviceId">--</span></div><div class="status detail-row"><span>Name</span><span id="deviceName">--</span></div><div class="status"><span>Provisioning</span><span class="state" id="provisioningStatus">--</span></div><div class="status"><span>Hardware revision</span><span id="hardwareRevision">--</span></div><div class="status"><span>Provisioned at</span><span id="provisionedAt">--</span></div><div class="status detail-row"><span>Provisioning error</span><span id="provisioningError">No errors</span></div></div>
     <div class="card"><div class="label">Connectivity</div><div class="status"><span>Server</span><span class="state" id="uploadStatus">--</span></div><div class="status"><span>Protocol</span><span id="uploadProtocol">--</span></div><div class="status"><span>Wi-Fi</span><span id="wifiStatus">--</span></div><div class="status"><span>Remote management</span><span class="state" id="remoteManagementStatus">--</span></div><div class="status"><span>Applied configuration</span><span id="configVersion">--</span></div><div class="status detail-row"><span>Upstream endpoint</span><span id="uploadServer">--</span></div></div>
-    <div class="card"><div class="label">Hardware &amp; time</div><div class="status"><span>ADC</span><span class="state" id="adcStatus">--</span></div><div class="status"><span>RTC</span><span class="state" id="rtcStatus">--</span></div><div class="status"><span>Last time sync</span><span id="rtcLastSync">--</span></div><div class="status"><span>OTA updates</span><span class="state" id="otaStatus">--</span></div></div>
+    <div class="card"><div class="label">Hardware &amp; time</div><div class="status"><span>ADC</span><span class="state" id="adcStatus">--</span></div><div class="status"><span>RTC</span><span class="state" id="rtcStatus">--</span></div><div class="status"><span>Last time sync</span><span id="rtcLastSync">--</span></div><div class="status"><span>Secure boot</span><span class="state" id="secureBootStatus">--</span></div><div class="status"><span>Flash encryption</span><span class="state" id="flashEncryptionStatus">--</span></div><div class="status"><span>Production gate</span><span class="state" id="productionSecurityStatus">--</span></div><div class="status"><span>OTA updates</span><span class="state" id="otaStatus">--</span></div></div>
     <div class="card"><div class="label">Storage</div><div class="status"><span>Onboard queue</span><span id="queueStatus">--</span></div><div class="status"><span>Queue capacity</span><span id="queueCapacity">--</span></div><div class="status"><span>Dropped records</span><span id="queueDropped">--</span></div><div class="status"><span>Corruption repairs</span><span id="queueCorruption">--</span></div><div class="status"><span>Quarantined bytes</span><span id="queueQuarantined">--</span></div><div class="status"><span>SD logging</span><span class="state" id="sdStatus">--</span></div><div class="status detail-row"><span>Current log file</span><span id="logFile">--</span></div></div>
     <div class="card"><div class="label">Transport</div><div class="status detail-row"><span>Upload session</span><span id="uploadSession">--</span></div><div class="status"><span>Upload sequence</span><span id="uploadSequence">--</span></div><div class="status detail-row"><span>Upload error</span><span id="uploadError">No errors</span></div><div class="status detail-row"><span>Remote-management error</span><span id="remoteManagementError">No errors</span></div></div>
     <div class="card"><div class="label">Hardware errors</div><div class="status detail-row"><span>Queue</span><span id="queueError">No errors</span></div><div class="status detail-row"><span>RTC</span><span id="rtcError">No errors</span></div><div class="status detail-row"><span>Logging</span><span id="logError">No errors</span></div></div>
@@ -610,6 +637,7 @@ String WebUi::diagnosticsHtml() const {
       text('uploadProtocol',data.system.upload_protocol.toUpperCase()); text('wifiStatus',data.system.wifi_mode+' '+data.system.ip_address); text('uploadServer',data.system.upload_server||'Not configured');
       state('remoteManagementStatus',data.system.remote_management_enabled?'ENABLED':'DISABLED',data.system.remote_management_enabled?'ok':''); text('configVersion','v'+data.system.applied_config_version+' '+(data.system.remote_management_status||'ready'));
       state('adcStatus',data.system.adc_ready?'READY':'FAULT',data.system.adc_ready?'ok':'bad');
+      state('secureBootStatus',data.system.secure_boot_enabled?'ENABLED':'DISABLED',data.system.secure_boot_enabled?'ok':'warn'); const flashMode=data.system.flash_encryption_release_mode?'RELEASE':(data.system.flash_encryption_enabled?'DEVELOPMENT':'DISABLED'); state('flashEncryptionStatus',flashMode,data.system.flash_encryption_release_mode?'ok':'warn'); const productionReady=data.system.production_security_ready; state('productionSecurityStatus',data.system.production_security_required?(productionReady?'READY':'BLOCKED'):'DEVELOPMENT',data.system.production_security_required?(productionReady?'ok':'bad'):'warn');
       const rtc=data.system.rtc_enabled?(data.system.rtc_ready?(data.system.rtc_synced?'NTP SYNCED':'HOLDOVER'):'FAULT'):'DISABLED'; state('rtcStatus',rtc,rtc==='FAULT'?'bad':(rtc==='NTP SYNCED'?'ok':'warn')); text('rtcLastSync',data.system.rtc_last_sync||'--');
       const ota=data.system.ota_enabled?(data.system.ota_ready?'READY':'LOCKED'):'DISABLED'; state('otaStatus',ota,ota==='READY'?'ok':(ota==='LOCKED'?'warn':''));
       text('queueStatus',data.system.store_forward_enabled?(data.system.store_forward_ready?data.system.store_forward_pending_records+' pending / '+Math.round(data.system.store_forward_pending_bytes/1024)+' KiB':'FAULT'):'DISABLED'); text('queueCapacity',Math.round(data.system.store_forward_capacity_bytes/1024)+' KiB'); text('queueDropped',data.system.store_forward_dropped_records); text('queueCorruption',data.system.store_forward_corruption_events); text('queueQuarantined',data.system.store_forward_quarantined_bytes);

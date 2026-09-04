@@ -20,6 +20,7 @@ This repo uses a small set of source-of-truth files for the important facts, and
 | Host-test entrypoint | [`scripts/run-host-tests.sh`](../scripts/run-host-tests.sh) | Canonical fast logic-test command |
 | Repo-wide verification wrapper | [`scripts/verify-repo.sh`](../scripts/verify-repo.sh) | Canonical local/CI verification entrypoint |
 | CI build/release behavior | [`.github/workflows/`](../.github/workflows/) | Must stay aligned with `platformio.ini` env/artifact paths |
+| Production image classification | [`scripts/check_production_security.py`](../scripts/check_production_security.py), [`docs/production-security.md`](production-security.md) | Secure Boot v2, signed binaries, release-mode flash encryption, and rollback must all be present before an ESP32 image is production-eligible |
 
 ## Verification Contract
 

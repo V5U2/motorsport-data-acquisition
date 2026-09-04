@@ -13,6 +13,7 @@ Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and das
 - Keeps pin mapping, sensor calibration, and refresh rates in one config file
 - Synchronises the RV-3028 from NTP at every networked boot and hourly thereafter, while retaining RTC holdover when offline
 - Derives an immutable per-board ESP32 identity and loads owner credentials from an identity-bound USB provisioning record
+- Disables fallback AP, password OTA, and local HTTP settings on ESP32; production-candidate builds also fail closed unless Secure Boot and flash encryption are active
 
 ## Required hardware
 
@@ -46,25 +47,25 @@ Primary source files:
 
 ## Release artifacts
 
-Tagged releases publish separate NodeMCU and ESP32 application binaries, ELF files, and an ESP32 16 MB factory image. Each release also contains `build-metadata.json`, which records the tag, commit, PlatformIO environments, flash sizes, partition layouts, and artifact names, plus `SHA256SUMS` covering every published firmware and metadata file. The workflow refuses to overwrite existing assets and downloads the exact publication for a second checksum and byte-for-byte verification. Verify the checksum before flashing and select only the artifact whose target and flash layout match the physical board. See [Firmware releases and rollback](docs/releases.md) for promotion, emergency publication, and rollback rehearsal.
+Tagged releases currently publish development artifacts. They are immutable and checksummed, but are not signed production images. NodeMCU/ESP8266 is not a supported production target, and the bundled ESP32 Arduino SDK fails the production-security audit. See [ESP32 production security and recovery](docs/production-security.md) before interpreting an artifact, and [Firmware releases and rollback](docs/releases.md) for publication evidence.
 
 ## Wi-Fi firmware updates
 
-The device supports password-protected Arduino OTA updates while connected in station mode. Production ESP32 hardware receives its unique OTA/settings password through USB provisioning; the ESP8266 development target uses the ignored `include/AppSecrets.h`. OTA remains locked when the effective value is empty. The local `/api/live` response reports `ota_enabled` and `ota_ready` without exposing the password.
+Password-protected Arduino OTA is available only on the ESP8266 development target. ESP32 disables it because a reusable password does not provide signed-image enforcement or encrypted transport. The local `/api/live` response reports `ota_enabled` and `ota_ready` without exposing credentials.
 
-The first OTA-capable firmware must be installed over USB. After that, build and upload on the same trusted network with the helper script, which reads the password from the ignored secrets header without printing it:
+The first ESP8266 OTA-capable firmware must be installed over USB. After that, build and upload only on a trusted development network with the helper script, which reads the password from the ignored secrets header without printing it:
 
 ```sh
 ./scripts/upload-ota.sh mda-aabbccddeeff.local
 ```
 
-An IP address can be supplied instead if `.local` discovery is unavailable. Do not commit the password or expose Arduino OTA beyond the trusted device network. OTA provides authenticated transfer, not transport encryption.
+An IP address can be supplied instead if `.local` discovery is unavailable. Do not commit the password or expose Arduino OTA beyond the trusted device network. It is never a production update mechanism.
 
 ## Live streaming
 
 The firmware includes a live telemetry publisher for near-real-time upload. MQTT remains the normal LAN transport. Production ESP32 credentials are installed with the [provisioning runbook](docs/provisioning.md), without rebuilding the factory image. The ignored secrets header remains a development compatibility path. HTTPS validates the public certificate chain against ISRG Root X1 and posts to the telemetry app compatibility endpoint; it never disables TLS verification or redirects gateway ownership into firmware.
 
-The local dashboard separates connectivity, hardware, storage, and diagnostic state. It shows the active upstream endpoint, whether the server is connected, whether remote management is enabled locally, and the applied remote-configuration version. Open `/settings` to change the server host, port, live-upload enable flag, primary and secondary NTP servers, POSIX timezone rule, displayed timezone label, and the optional remote-management flag. The page uses HTTP Digest authentication with username `admin` and the device's OTA password. These settings are stored in a versioned, checksummed flash-backed EEPROM record and survive power loss. For HTTPS, the Cloudflare Access client ID and secret may be compiled from the ignored secrets header or replaced through write-only settings fields. Existing credential values are never returned in the page or API; leaving a field blank keeps the current value. Saving settings restarts the logger so the new endpoint, credentials, and clock configuration are applied cleanly.
+The local dashboard separates connectivity, hardware, storage, and diagnostic state. It shows the active upstream endpoint, whether the server is connected, whether remote management is enabled locally, the applied remote-configuration version, and non-secret Secure Boot/flash-encryption posture. ESP32 local settings GET and POST return HTTP 410; configure it using identity-bound USB provisioning or the optional allow-listed app management path. The legacy digest-authenticated `/settings` page remains only on ESP8266 development firmware. Neither diagnostics nor `/api/live` returns Wi-Fi, OTA, MQTT, Cloudflare, app bearer, recovery, encryption, or signing secrets.
 
 Remote management is disabled by default. Enabling it locally requires live upload and displays a temporary pairing code with a refresh countdown on the authenticated settings page. The logger replaces that proof every ten minutes and immediately reports the replacement through its status heartbeat. Enter only the code in the app's shared device-pairing field; the app identifies the logger automatically. Management heartbeats include the effective live-upload flag, NTP servers, timezone rule, and timezone label so the app can initialise its form from the logger's current non-secret configuration. MQTT receives desired configuration from the device-scoped topic; HTTPS receives it in the authenticated status response. Desired documents use schema version 1, must match the authenticated device identity, carry a monotonically increasing configuration version, and contain the complete allow-listed configuration snapshot. Upstream host and credentials are deliberately excluded so a remote command cannot redirect or strand the logger.
 
@@ -168,7 +169,7 @@ Example live payload shape:
 - On ESP32, hold the UI button continuously for five seconds during boot to clear owner credentials and runtime settings while preserving the immutable device identity.
 
 ## Web endpoints
-Production ESP32 networking is unavailable until an identity-bound owner record is installed over USB. The ESP8266 development target can use the ignored `include/AppSecrets.h`. Station association uses a normal network scan. The current fallback AP behavior is development-only pending APE-82 commissioning hardening.
+ESP32 networking is unavailable until an identity-bound owner record is installed over USB, and a production-candidate build additionally requires runtime Secure Boot and flash-encryption state. ESP32 has no fallback AP. The ESP8266 development target can use the ignored `include/AppSecrets.h` and retains its bench-only fallback behavior.
 - `/` compact phone-friendly sensor dashboard with a basic fault summary
 - `/diagnostics` detailed connectivity, hardware, storage, transport, and sensor diagnostics
 - `/api/live` current readings and system state as JSON

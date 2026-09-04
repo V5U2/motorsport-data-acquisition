@@ -23,6 +23,9 @@ bool intervalElapsed(uint32_t nowMs, uint32_t previousMs, uint32_t intervalMs);
 bool isRetryableHttpStatus(int status);
 bool shouldDiscardQueuedHttpStatus(int status);
 bool isValidRecorderAssignmentStatus(std::string_view status);
+bool productionSecurityAllowsNetwork(bool required,
+                                     bool secureBootEnabled,
+                                     bool flashEncryptionReleaseMode);
 
 std::string fallbackTimestamp(uint32_t uptimeMs);
 std::string formatUptime(uint64_t uptimeMs);

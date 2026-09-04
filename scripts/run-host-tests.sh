@@ -26,3 +26,5 @@ mkdir -p "$BUILD_DIR"
 "$BUILD_DIR/store_forward_queue_tests"
 
 python3 -m unittest "$ROOT_DIR/tests/test_provision_device.py"
+python3 -m unittest "$ROOT_DIR/tests/test_production_security.py"
+python3 -m unittest "$ROOT_DIR/tests/test_security_surface.py"

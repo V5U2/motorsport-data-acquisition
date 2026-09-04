@@ -110,6 +110,17 @@ void testHttpRetryPolicy() {
               "rejects unknown recorder assignment state");
 }
 
+void testProductionSecurityGate() {
+  expectEqual(Logic::productionSecurityAllowsNetwork(false, false, false), 1,
+              "development build does not claim production enforcement");
+  expectEqual(Logic::productionSecurityAllowsNetwork(true, true, true), 1,
+              "production networking requires both hardware controls");
+  expectEqual(Logic::productionSecurityAllowsNetwork(true, false, true), 0,
+              "production networking fails closed without secure boot");
+  expectEqual(Logic::productionSecurityAllowsNetwork(true, true, false), 0,
+              "production networking fails closed without release-mode flash encryption");
+}
+
 void testTimestampFormatting() {
   expectEqual(Logic::fallbackTimestamp(12345), "boot+12345", "fallback timestamp");
   expectEqual(Logic::formatUptime(0), "00:00:00:00", "zero uptime");
@@ -224,6 +235,7 @@ int main() {
   testFilter();
   testIntervalTiming();
   testHttpRetryPolicy();
+  testProductionSecurityGate();
   testTimestampFormatting();
   testFileNameNormalization();
   testUploadIdentifiers();

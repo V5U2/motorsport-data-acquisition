@@ -19,7 +19,8 @@ class WebUi {
              CsvLogger &logger,
              RuntimeSettings &settings,
              const char *deviceHostname,
-             const char *settingsPassword);
+             const char *settingsPassword,
+             bool localSettingsEnabled);
   void handleClient();
   void publishState(const AppState &state);
   bool isReady() const;
@@ -54,6 +55,7 @@ class WebUi {
   String managementPairingCode_;
   String deviceHostname_;
   String settingsPassword_;
+  bool localSettingsEnabled_ = false;
   uint32_t managementPairingExpiresInSeconds_ = 0;
   bool restartPending_ = false;
   uint32_t restartRequestedMs_ = 0;

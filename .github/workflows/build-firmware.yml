@@ -44,7 +44,7 @@ jobs:
         run: |
           PLATFORMIO_CORE_DIR="$PWD/.platformio" \
             PLATFORMIO_SETTING_ENABLE_TELEMETRY=no \
-            pio run -e nodemcuv2 -e esp32dev
+            pio run -e nodemcuv2 -e esp32dev -e esp32dev_production_candidate
 
       - name: Prepare firmware artifacts
         run: |
@@ -60,6 +60,10 @@ jobs:
             0x8000 .pio/build/esp32dev/partitions.bin \
             0xe000 .platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
             0x10000 .pio/build/esp32dev/firmware.bin
+          python scripts/check_production_security.py \
+            .platformio/packages/framework-arduinoespressif32/tools/sdk/esp32/sdkconfig \
+            --build-flags '-D APEXI_PRODUCTION_SECURITY_REQUIRED=1' --json \
+            > dist/esp32-security-classification.json
 
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
