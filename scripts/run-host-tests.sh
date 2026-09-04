@@ -9,6 +9,7 @@ mkdir -p "$BUILD_DIR"
 /usr/bin/c++ -std=c++17 -Wall -Wextra -Werror \
   -I"$ROOT_DIR/include" \
   "$ROOT_DIR/src/Logic.cpp" \
+  "$ROOT_DIR/src/ProvisioningPolicy.cpp" \
   "$ROOT_DIR/tests/logic_tests.cpp" \
   -o "$BUILD_DIR/logic_tests"
 
@@ -23,3 +24,5 @@ mkdir -p "$BUILD_DIR"
   -o "$BUILD_DIR/store_forward_queue_tests"
 
 "$BUILD_DIR/store_forward_queue_tests"
+
+python3 -m unittest "$ROOT_DIR/tests/test_provision_device.py"

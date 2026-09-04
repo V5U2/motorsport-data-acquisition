@@ -52,6 +52,9 @@ class LiveUpload {
                          const char *ntpSecondary,
                          const char *timeZoneRule,
                          const char *timeZoneLabel);
+  void setDeviceMetadata(const char *friendlyName,
+                         const char *hardwareRevision,
+                         const char *provisionedAt);
   bool consumeRemoteConfig(RemoteConfig &config);
   void acknowledgeRemoteConfig(uint32_t version);
 
@@ -101,6 +104,9 @@ class LiveUpload {
   uint32_t pairingCodeGeneratedMs_ = 0;
   String managementStatus_ = "ready";
   String managementError_;
+  String friendlyName_;
+  String hardwareRevision_;
+  String provisionedAt_;
   bool reportedUploadEnabled_ = false;
   String reportedNtpPrimary_;
   String reportedNtpSecondary_;

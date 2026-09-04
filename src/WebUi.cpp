@@ -8,16 +8,20 @@
 
 bool WebUi::begin(const AppConfig::WifiConfig &config,
                   CsvLogger &logger,
-                  RuntimeSettings &settings) {
+                  RuntimeSettings &settings,
+                  const char *deviceHostname,
+                  const char *settingsPassword) {
   logger_ = &logger;
   settings_ = &settings;
+  deviceHostname_ = deviceHostname;
+  settingsPassword_ = settingsPassword;
 
   if (config.mode == AppConfig::WifiMode::Station && strlen(config.stationSsid) > 0) {
     WiFi.persistent(false);
 #if defined(ESP8266)
-    WiFi.hostname("mda-logger");
+    WiFi.hostname(deviceHostname_.c_str());
 #else
-    WiFi.setHostname("mda-logger");
+    WiFi.setHostname(deviceHostname_.c_str());
 #endif
     WiFi.mode(WIFI_STA);
     Serial.print("STA joining ");
@@ -76,6 +80,9 @@ bool WebUi::begin(const AppConfig::WifiConfig &config,
 }
 
 void WebUi::handleClient() {
+  if (!ready_) {
+    return;
+  }
   server_.handleClient();
   if (restartPending_ && (millis() - restartRequestedMs_) >= 750) {
     ESP.restart();
@@ -219,11 +226,11 @@ void WebUi::handleSettingsSave() {
 }
 
 bool WebUi::settingsAuthorized() {
-  if (strlen(AppConfig::kOta.password) == 0) {
-    server_.send(503, "text/plain", "Configure APEXI_OTA_PASSWORD before using settings");
+  if (settingsPassword_.isEmpty()) {
+    server_.send(503, "text/plain", "Provision a device-specific settings credential over USB first");
     return false;
   }
-  if (!server_.authenticate("admin", AppConfig::kOta.password)) {
+  if (!server_.authenticate("admin", settingsPassword_.c_str())) {
     server_.requestAuthentication(DIGEST_AUTH, "MDA Logger");
     return false;
   }
@@ -307,6 +314,12 @@ String WebUi::liveJson() const {
   }
   json += "],";
   json += "\"system\":{";
+  json += "\"device_id\":\"" + jsonEscape(state_.system.deviceId) + "\",";
+  json += "\"device_name\":\"" + jsonEscape(state_.system.deviceName) + "\",";
+  json += "\"hardware_revision\":\"" + jsonEscape(state_.system.hardwareRevision) + "\",";
+  json += "\"provisioning_status\":\"" + jsonEscape(state_.system.provisioningStatus) + "\",";
+  json += "\"provisioning_error\":\"" + jsonEscape(state_.system.provisioningError) + "\",";
+  json += "\"provisioned_at\":\"" + jsonEscape(state_.system.provisionedAt) + "\",";
   json += "\"adc_ready\":" + String(state_.system.adcReady ? "true" : "false") + ",";
   json += "\"display_enabled\":" + String(state_.system.displayEnabled ? "true" : "false") + ",";
   json += "\"rtc_enabled\":" + String(state_.system.rtcEnabled ? "true" : "false") + ",";
@@ -578,6 +591,7 @@ String WebUi::diagnosticsHtml() const {
 <body>
   <header><div><h1>Logger Diagnostics</h1><div class="header-meta" id="stamp">Waiting for data...</div></div><nav class="actions" aria-label="Logger pages"><a class="action-link" href="/">Dashboard</a><a class="action-link" href="/settings">Settings</a></nav></header>
   <main><section class="grid">
+    <div class="card"><div class="label">Identity &amp; provisioning</div><div class="status detail-row"><span>Logger ID</span><span id="deviceId">--</span></div><div class="status detail-row"><span>Name</span><span id="deviceName">--</span></div><div class="status"><span>Provisioning</span><span class="state" id="provisioningStatus">--</span></div><div class="status"><span>Hardware revision</span><span id="hardwareRevision">--</span></div><div class="status"><span>Provisioned at</span><span id="provisionedAt">--</span></div><div class="status detail-row"><span>Provisioning error</span><span id="provisioningError">No errors</span></div></div>
     <div class="card"><div class="label">Connectivity</div><div class="status"><span>Server</span><span class="state" id="uploadStatus">--</span></div><div class="status"><span>Protocol</span><span id="uploadProtocol">--</span></div><div class="status"><span>Wi-Fi</span><span id="wifiStatus">--</span></div><div class="status"><span>Remote management</span><span class="state" id="remoteManagementStatus">--</span></div><div class="status"><span>Applied configuration</span><span id="configVersion">--</span></div><div class="status detail-row"><span>Upstream endpoint</span><span id="uploadServer">--</span></div></div>
     <div class="card"><div class="label">Hardware &amp; time</div><div class="status"><span>ADC</span><span class="state" id="adcStatus">--</span></div><div class="status"><span>RTC</span><span class="state" id="rtcStatus">--</span></div><div class="status"><span>Last time sync</span><span id="rtcLastSync">--</span></div><div class="status"><span>OTA updates</span><span class="state" id="otaStatus">--</span></div></div>
     <div class="card"><div class="label">Storage</div><div class="status"><span>Onboard queue</span><span id="queueStatus">--</span></div><div class="status"><span>Queue capacity</span><span id="queueCapacity">--</span></div><div class="status"><span>Dropped records</span><span id="queueDropped">--</span></div><div class="status"><span>Corruption repairs</span><span id="queueCorruption">--</span></div><div class="status"><span>Quarantined bytes</span><span id="queueQuarantined">--</span></div><div class="status"><span>SD logging</span><span class="state" id="sdStatus">--</span></div><div class="status detail-row"><span>Current log file</span><span id="logFile">--</span></div></div>
@@ -591,6 +605,7 @@ String WebUi::diagnosticsHtml() const {
     async function refresh(){
       const response=await fetch('/api/live'); const data=await response.json();
       text('stamp',data.timestamp+' '+data.system.time_zone+' | uptime '+data.uptime);
+      text('deviceId',data.system.device_id||'--'); text('deviceName',data.system.device_name||'--'); text('hardwareRevision',data.system.hardware_revision||'--'); text('provisionedAt',data.system.provisioned_at||'--'); const provisioned=data.system.provisioning_status==='provisioned'; state('provisioningStatus',(data.system.provisioning_status||'unknown').toUpperCase(),provisioned?'ok':'warn'); text('provisioningError',data.system.provisioning_error||'No errors');
       const upload=data.system.upload_enabled?(data.system.upload_connected?'CONNECTED':'WAITING'):'DISABLED'; state('uploadStatus',upload,upload==='CONNECTED'?'ok':(upload==='WAITING'?'warn':''));
       text('uploadProtocol',data.system.upload_protocol.toUpperCase()); text('wifiStatus',data.system.wifi_mode+' '+data.system.ip_address); text('uploadServer',data.system.upload_server||'Not configured');
       state('remoteManagementStatus',data.system.remote_management_enabled?'ENABLED':'DISABLED',data.system.remote_management_enabled?'ok':''); text('configVersion','v'+data.system.applied_config_version+' '+(data.system.remote_management_status||'ready'));

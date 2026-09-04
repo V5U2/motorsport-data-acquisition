@@ -12,6 +12,7 @@ Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and das
 - Lights the NodeMCU built-in LED steadily once firmware setup begins
 - Keeps pin mapping, sensor calibration, and refresh rates in one config file
 - Synchronises the RV-3028 from NTP at every networked boot and hourly thereafter, while retaining RTC holdover when offline
+- Derives an immutable per-board ESP32 identity and loads owner credentials from an identity-bound USB provisioning record
 
 ## Required hardware
 
@@ -38,7 +39,7 @@ Primary source files:
 ## Build and flash
 1. Install PlatformIO Core or use the PlatformIO VS Code extension.
 2. Wire the NodeMCU or classic ESP32 DevKit using the matching GPIO table in [`docs/hardware-setup.md`](docs/hardware-setup.md), then review [`include/PinDefinitions.h`](include/PinDefinitions.h).
-3. Review sensor ranges, timing values, live upload settings, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h). Copy `include/AppSecrets.example.h` to the ignored `include/AppSecrets.h` and set Wi-Fi plus MQTT or HTTPS credentials there.
+3. Review sensor ranges, timing values, live upload settings, and optional hardware toggles in [`include/AppConfig.h`](include/AppConfig.h). For production ESP32 hardware, follow the identity-bound [provisioning runbook](docs/provisioning.md); the ignored `include/AppSecrets.h` path is retained only for ESP8266/development builds.
 4. Run [`scripts/verify-repo.sh`](scripts/verify-repo.sh) `--fast` for host-side verification and contract checks, and `--full` when the local PlatformIO toolchain is available.
 5. Build and upload with `pio run -t upload --upload-port /dev/cu.usbserial-10`, replacing the port when needed.
 6. Open the serial monitor at 115200 baud with `pio device monitor`. If a CH340-based board stays in reset, open the port with DTR and RTS inactive or press the board's `RST` button once.
@@ -49,19 +50,19 @@ Tagged releases publish separate NodeMCU and ESP32 application binaries, ELF fil
 
 ## Wi-Fi firmware updates
 
-The ESP8266 supports password-protected Arduino OTA updates while connected in station mode. Set a strong, unique `APEXI_OTA_PASSWORD` in the ignored `include/AppSecrets.h`; OTA remains locked when that value is empty. The local `/api/live` response reports `ota_enabled` and `ota_ready` so update availability can be checked without exposing the password.
+The device supports password-protected Arduino OTA updates while connected in station mode. Production ESP32 hardware receives its unique OTA/settings password through USB provisioning; the ESP8266 development target uses the ignored `include/AppSecrets.h`. OTA remains locked when the effective value is empty. The local `/api/live` response reports `ota_enabled` and `ota_ready` without exposing the password.
 
 The first OTA-capable firmware must be installed over USB. After that, build and upload on the same trusted network with the helper script, which reads the password from the ignored secrets header without printing it:
 
 ```sh
-./scripts/upload-ota.sh mda-logger.local
+./scripts/upload-ota.sh mda-aabbccddeeff.local
 ```
 
 An IP address can be supplied instead if `.local` discovery is unavailable. Do not commit the password or expose Arduino OTA beyond the trusted device network. OTA provides authenticated transfer, not transport encryption.
 
 ## Live streaming
 
-The firmware includes a live telemetry publisher for near-real-time upload. MQTT remains the normal LAN transport. Set `APEXI_HTTPS_UPLOAD_ENABLED=1` to use the Access-protected HTTPS compatibility transport when the broker is not directly reachable. Configure the Cloudflare Access service-token pair and the scoped app device token only in the ignored `include/AppSecrets.h` created from [`include/AppSecrets.example.h`](include/AppSecrets.example.h). HTTPS validates the public certificate chain against ISRG Root X1; it never disables TLS verification.
+The firmware includes a live telemetry publisher for near-real-time upload. MQTT remains the normal LAN transport. Production ESP32 credentials are installed with the [provisioning runbook](docs/provisioning.md), without rebuilding the factory image. The ignored secrets header remains a development compatibility path. HTTPS validates the public certificate chain against ISRG Root X1 and posts to the telemetry app compatibility endpoint; it never disables TLS verification or redirects gateway ownership into firmware.
 
 The local dashboard separates connectivity, hardware, storage, and diagnostic state. It shows the active upstream endpoint, whether the server is connected, whether remote management is enabled locally, and the applied remote-configuration version. Open `/settings` to change the server host, port, live-upload enable flag, primary and secondary NTP servers, POSIX timezone rule, displayed timezone label, and the optional remote-management flag. The page uses HTTP Digest authentication with username `admin` and the device's OTA password. These settings are stored in a versioned, checksummed flash-backed EEPROM record and survive power loss. For HTTPS, the Cloudflare Access client ID and secret may be compiled from the ignored secrets header or replaced through write-only settings fields. Existing credential values are never returned in the page or API; leaving a field blank keeps the current value. Saving settings restarts the logger so the new endpoint, credentials, and clock configuration are applied cleanly.
 
@@ -75,7 +76,7 @@ Dashboard uptime is displayed as `DD:HH:mm:ss`. The live API retains numeric `up
 
 The ESP32 target uses the checked-in 16 MB partition table: two 2 MB OTA application slots plus an approximately 12 MB LittleFS partition. Store-and-forward is capped at 10 MB and split across two append-only segments; when capacity is exhausted, rotation drops the oldest remaining segment and reports the drop count. Only failed HTTPS snapshots are written, limiting flash wear during normal connected operation. A mount failure is reported without automatically formatting the partition, preserving queued data for explicit recovery. Invalid tails are checksummed and quarantined before repair, and acknowledgement metadata is committed before an empty segment is reclaimed. The [store-and-forward recovery contract](docs/store-forward-recovery.md) defines format compatibility, interruption outcomes, capacity/endurance estimates, and the destructive recovery procedure. The NodeMCU target keeps its existing 4 MB layout and does not enable this queue.
 
-Production brokers require authentication. Set `APEXI_MQTT_USERNAME` to the same normalized value as `kLiveUpload.deviceId`; the broker ACL uses that identity to limit the device to publishing `<topicPrefix>/<deviceId>/live` and `<topicPrefix>/<deviceId>/status`. When remote management is enabled, it may additionally read only its own `<topicPrefix>/<deviceId>/config/desired` topic. Keep the matching password in the encrypted infrastructure vault and never commit `AppSecrets.h`.
+Production brokers require authentication. USB provisioning requires the MQTT username to equal the immutable device ID; the broker ACL uses that identity to limit the device to publishing `<topicPrefix>/<deviceId>/live` and `<topicPrefix>/<deviceId>/status`. When remote management is enabled, it may additionally read only its own `<topicPrefix>/<deviceId>/config/desired` topic. Keep the matching password in the encrypted infrastructure vault.
 
 Current behavior:
 - The device publishes live sensor snapshots to MQTT on a fixed interval.
@@ -138,8 +139,8 @@ Example live payload shape:
 ```json
 {
   "schema_version": 1,
-  "device_id": "mda-logger",
-  "session_id": "mda-logger-boot-42",
+  "device_id": "mda-aabbccddeeff",
+  "session_id": "mda-aabbccddeeff-boot-42",
   "sequence": 12,
   "timestamp": "2026-04-05T02:15:30Z",
   "uptime_ms": 15234,
@@ -158,15 +159,16 @@ Example live payload shape:
 
 ## Host-side tests
 - Run `./scripts/run-host-tests.sh` to execute hardware-independent logic tests on a desktop machine.
-- These tests cover sensor current conversion, threshold faults, engineering-value clamping, filter behavior, RTC/fallback timestamp formatting, and log filename sanitization edge cases.
+- These tests cover sensor conversion and faults, timestamps, filenames, identity derivation, malformed or mismatched provisioning, duplicate fleet IDs, and secret-free inventory output.
 - GitHub Actions is configured to run the repo fast verification path on pushes and pull requests in [host-tests.yml](.github/workflows/host-tests.yml).
 
 ## Runtime controls
 - Short press the UI button to switch between the main gauge screen and the diagnostics screen.
 - Hold the UI button for 1.2 seconds to clear latched sensor faults.
+- On ESP32, hold the UI button continuously for five seconds during boot to clear owner credentials and runtime settings while preserving the immutable device identity.
 
 ## Web endpoints
-The checked-in default is station mode. Create the ignored `include/AppSecrets.h` from the example and provide a 2.4 GHz SSID/password; `fast_connect`-style BSSID/channel pinning is not used, so the ESP8266 performs a normal network scan. If station association times out, firmware falls back to the open 2.4 GHz SoftAP `MDA-LOGGER` at `http://192.168.44.1` on channel 6. Set `AppConfig::kWifi.apPassword` to an 8+ character WPA2 key if a closed fallback AP is required.
+Production ESP32 networking is unavailable until an identity-bound owner record is installed over USB. The ESP8266 development target can use the ignored `include/AppSecrets.h`. Station association uses a normal network scan. The current fallback AP behavior is development-only pending APE-82 commissioning hardening.
 - `/` compact phone-friendly sensor dashboard with a basic fault summary
 - `/diagnostics` detailed connectivity, hardware, storage, transport, and sensor diagnostics
 - `/api/live` current readings and system state as JSON

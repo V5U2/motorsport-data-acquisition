@@ -137,6 +137,14 @@ bool RuntimeSettings::applyRemoteConfig(const RemoteConfig &config) {
               rule, label, true, config.version);
 }
 
+bool RuntimeSettings::factoryReset() {
+  EEPROM.begin(sizeof(Record));
+  for (size_t index = 0; index < sizeof(Record); ++index) {
+    EEPROM.write(index, 0xFF);
+  }
+  return EEPROM.commit();
+}
+
 const AppConfig::UploadConfig &RuntimeSettings::uploadConfig() const { return uploadConfig_; }
 
 bool RuntimeSettings::liveUploadEnabled() const { return uploadEnabled_; }
