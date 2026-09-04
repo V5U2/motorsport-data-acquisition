@@ -348,6 +348,14 @@ void LiveUpload::setReportedConfig(const bool uploadEnabled,
   reportedTimeZoneLabel_ = timeZoneLabel == nullptr ? "" : timeZoneLabel;
 }
 
+void LiveUpload::setDeviceMetadata(const char *friendlyName,
+                                   const char *hardwareRevision,
+                                   const char *provisionedAt) {
+  friendlyName_ = friendlyName == nullptr ? "" : friendlyName;
+  hardwareRevision_ = hardwareRevision == nullptr ? "" : hardwareRevision;
+  provisionedAt_ = provisionedAt == nullptr ? "" : provisionedAt;
+}
+
 void LiveUpload::rotatePairingCode(const uint32_t nowMs) {
 #if defined(ESP8266)
   const uint64_t entropy = (static_cast<uint64_t>(ESP.random()) << 32) | ESP.random();
@@ -753,6 +761,9 @@ String LiveUpload::buildStatusJson(const bool connected) const {
     json += "\"status\":\"" + jsonEscape(managementStatus_) + "\",";
     json += "\"error\":\"" + jsonEscape(managementError_) + "\",";
     json += "\"firmware_version\":\"" + jsonEscape(APEXI_FIRMWARE_VERSION) + "\",";
+    json += "\"friendly_name\":\"" + jsonEscape(friendlyName_) + "\",";
+    json += "\"hardware_revision\":\"" + jsonEscape(hardwareRevision_) + "\",";
+    json += "\"provisioned_at\":\"" + jsonEscape(provisionedAt_) + "\",";
     json += "\"settings\":{";
     json += "\"upload_enabled\":" + String(reportedUploadEnabled_ ? "true" : "false") + ",";
     json += "\"ntp_primary\":\"" + jsonEscape(reportedNtpPrimary_) + "\",";

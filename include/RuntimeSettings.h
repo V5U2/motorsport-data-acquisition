@@ -20,6 +20,7 @@ class RuntimeSettings {
             const String &cloudflareAccessClientId = "",
             const String &cloudflareAccessClientSecret = "");
   bool applyRemoteConfig(const RemoteConfig &config);
+  bool factoryReset();
 
   const AppConfig::UploadConfig &uploadConfig() const;
   bool liveUploadEnabled() const;

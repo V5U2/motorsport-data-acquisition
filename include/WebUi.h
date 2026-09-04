@@ -17,7 +17,9 @@ class WebUi {
  public:
   bool begin(const AppConfig::WifiConfig &config,
              CsvLogger &logger,
-             RuntimeSettings &settings);
+             RuntimeSettings &settings,
+             const char *deviceHostname,
+             const char *settingsPassword);
   void handleClient();
   void publishState(const AppState &state);
   bool isReady() const;
@@ -50,6 +52,8 @@ class WebUi {
   String mode_;
   String ipAddress_;
   String managementPairingCode_;
+  String deviceHostname_;
+  String settingsPassword_;
   uint32_t managementPairingExpiresInSeconds_ = 0;
   bool restartPending_ = false;
   uint32_t restartRequestedMs_ = 0;

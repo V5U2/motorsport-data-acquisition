@@ -25,6 +25,12 @@ struct SensorSnapshot {
 };
 
 struct SystemStatus {
+  String deviceId;
+  String deviceName;
+  String hardwareRevision;
+  String provisioningStatus;
+  String provisioningError;
+  String provisionedAt;
   bool adcReady;
   bool displayEnabled;
   bool rtcEnabled;

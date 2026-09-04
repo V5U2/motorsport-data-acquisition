@@ -8,8 +8,10 @@
 #include "AppConfig.h"
 #include "CsvLogger.h"
 #include "Dashboard.h"
+#include "DeviceProvisioning.h"
 #include "LiveUpload.h"
 #include "Logic.h"
+#include "ProvisioningPolicy.h"
 #include "RuntimeSettings.h"
 #include "SensorChannel.h"
 #include "Timekeeper.h"
@@ -32,6 +34,7 @@ Dashboard dashboard;
 WebUi webUi;
 LiveUpload liveUpload;
 RuntimeSettings runtimeSettings;
+DeviceProvisioning deviceProvisioning;
 
 bool adcReady = false;
 bool rtcReady = false;
@@ -111,6 +114,12 @@ AppState buildState() {
   state.uptime = String(Logic::formatUptime(uptimeMs).c_str());
   state.timestamp = timekeeper.logTimestamp(state.uptimeMs);
   state.transportTimestamp = timekeeper.transportTimestamp(state.uptimeMs);
+  state.system.deviceId = deviceProvisioning.deviceId();
+  state.system.deviceName = deviceProvisioning.friendlyName();
+  state.system.hardwareRevision = deviceProvisioning.hardwareRevision();
+  state.system.provisioningStatus = deviceProvisioning.status();
+  state.system.provisioningError = deviceProvisioning.lastError();
+  state.system.provisionedAt = deviceProvisioning.provisionedAt();
   state.system.adcReady = adcReady;
   state.system.displayEnabled = AppConfig::kFeatures.displayEnabled;
   state.system.rtcEnabled = AppConfig::kFeatures.rtcEnabled;
@@ -160,14 +169,15 @@ void sampleSensors() {
 }
 
 void beginOta() {
+  const AppConfig::OtaConfig &ota = deviceProvisioning.otaConfig();
   if (!AppConfig::kFeatures.otaUpdatesEnabled || !wifiReady ||
-      webUi.modeString() != "STA" || strlen(AppConfig::kOta.password) == 0) {
+      webUi.modeString() != "STA" || strlen(ota.password) == 0) {
     otaReady = false;
     return;
   }
 
-  ArduinoOTA.setHostname(AppConfig::kOta.hostname);
-  ArduinoOTA.setPassword(AppConfig::kOta.password);
+  ArduinoOTA.setHostname(ota.hostname);
+  ArduinoOTA.setPassword(ota.password);
   ArduinoOTA.onStart([]() { Serial.println("OTA update started"); });
   ArduinoOTA.onEnd([]() { Serial.println("OTA update complete"); });
   ArduinoOTA.onError([](ota_error_t error) {
@@ -256,6 +266,61 @@ void setup() {
 #endif
 
   pinMode(AppConfig::kPins.buttonPin, INPUT_PULLUP);
+
+  deviceProvisioning.begin(AppConfig::kWifi, AppConfig::kOta, AppConfig::kLiveUpload);
+  Serial.print("DEVICE_ID=");
+  Serial.println(deviceProvisioning.deviceId());
+  Serial.print("PROVISIONING_STATUS=");
+  Serial.println(deviceProvisioning.status());
+
+#if defined(ESP32)
+  if (digitalRead(AppConfig::kPins.buttonPin) == LOW) {
+    const uint32_t resetStartedMs = millis();
+    while (digitalRead(AppConfig::kPins.buttonPin) == LOW &&
+           (millis() - resetStartedMs) < 5000) {
+      delay(20);
+    }
+    if ((millis() - resetStartedMs) >= 5000) {
+      const bool ownerCleared = deviceProvisioning.factoryResetOwnerCredentials();
+      const bool runtimeCleared = runtimeSettings.factoryReset();
+      Serial.println(ownerCleared && runtimeCleared
+                         ? "FACTORY_RESET=owner-credentials-cleared"
+                         : "FACTORY_RESET=failed-closed");
+      Serial.flush();
+      delay(250);
+      ESP.restart();
+    }
+  }
+
+  Serial.setTimeout(2500);
+  const uint32_t provisioningWindowStartedMs = millis();
+  while ((millis() - provisioningWindowStartedMs) < 2500) {
+    if (Serial.available() > 0) {
+      const String command = Serial.readStringUntil('\n');
+      const bool provisioningAccepted = deviceProvisioning.acceptSerialCommand(command);
+      if (provisioningAccepted && runtimeSettings.factoryReset()) {
+        Serial.println("PROVISIONING_RESULT=accepted");
+        Serial.flush();
+        delay(250);
+        ESP.restart();
+      }
+      if (provisioningAccepted) {
+        deviceProvisioning.factoryResetOwnerCredentials();
+      }
+      Serial.print("PROVISIONING_RESULT=rejected error=");
+      Serial.println(provisioningAccepted
+                         ? "runtime settings reset failed; owner record removed"
+                         : deviceProvisioning.lastError());
+      if (command.startsWith("APEXI_PROVISION ")) {
+        Serial.flush();
+        delay(250);
+        ESP.restart();
+      }
+      break;
+    }
+    delay(10);
+  }
+#endif
   if (AppConfig::kFeatures.displayEnabled) {
     pinMode(AppConfig::kPins.tftCs, OUTPUT);
     digitalWrite(AppConfig::kPins.tftCs, HIGH);
@@ -273,17 +338,34 @@ void setup() {
     csvLogger.disable();
   }
 
-  runtimeSettings.begin(AppConfig::kLiveUpload, AppConfig::kFeatures.liveUploadEnabled);
-  wifiReady = webUi.begin(AppConfig::kWifi, csvLogger, runtimeSettings);
-  liveUpload.begin(runtimeSettings.uploadConfig(),
-                   runtimeSettings.liveUploadEnabled(),
-                   runtimeSettings.remoteManagementEnabled(),
-                   runtimeSettings.appliedConfigVersion());
-  liveUpload.setReportedConfig(runtimeSettings.liveUploadEnabled(),
-                               runtimeSettings.ntpPrimary(),
-                               runtimeSettings.ntpSecondary(),
-                               runtimeSettings.timeZoneRule(),
-                               runtimeSettings.timeZoneLabel());
+#if defined(ESP32)
+  constexpr bool kProductionEsp32Target = true;
+#else
+  constexpr bool kProductionEsp32Target = false;
+#endif
+  const bool networkAllowed = ProvisioningPolicy::networkAllowed(
+      kProductionEsp32Target, deviceProvisioning.isProvisioned());
+  if (networkAllowed) {
+    runtimeSettings.begin(deviceProvisioning.uploadConfig(), AppConfig::kFeatures.liveUploadEnabled);
+    wifiReady = webUi.begin(deviceProvisioning.wifiConfig(), csvLogger, runtimeSettings,
+                            deviceProvisioning.deviceId(),
+                            deviceProvisioning.otaConfig().password);
+    liveUpload.begin(runtimeSettings.uploadConfig(),
+                     runtimeSettings.liveUploadEnabled(),
+                     runtimeSettings.remoteManagementEnabled(),
+                     runtimeSettings.appliedConfigVersion());
+    liveUpload.setReportedConfig(runtimeSettings.liveUploadEnabled(),
+                                 runtimeSettings.ntpPrimary(),
+                                 runtimeSettings.ntpSecondary(),
+                                 runtimeSettings.timeZoneRule(),
+                                 runtimeSettings.timeZoneLabel());
+    liveUpload.setDeviceMetadata(deviceProvisioning.friendlyName(),
+                                 deviceProvisioning.hardwareRevision(),
+                                 deviceProvisioning.provisionedAt());
+  } else {
+    wifiReady = false;
+    Serial.println("NETWORK_DISABLED=provisioning-required");
+  }
   Serial.print("storeForwardReady=");
   Serial.print(liveUpload.storeForwardReady() ? "1" : "0");
   Serial.print(" pending=");
@@ -298,7 +380,9 @@ void setup() {
   Serial.println(webUi.modeString());
   Serial.print("ip=");
   Serial.println(webUi.ipAddress());
-  beginOta();
+  if (networkAllowed) {
+    beginOta();
+  }
   Serial.print("otaReady=");
   Serial.println(otaReady ? "1" : "0");
 
@@ -386,7 +470,7 @@ void loop() {
     lastDisplayMs = nowMs;
   }
 
-  if ((nowMs - lastUploadPublishMs) >= AppConfig::kLiveUpload.publishIntervalMs) {
+  if ((nowMs - lastUploadPublishMs) >= deviceProvisioning.uploadConfig().publishIntervalMs) {
     const AppState state = buildState();
     liveUpload.publishIfDue(state);
     webUi.publishState(buildState());

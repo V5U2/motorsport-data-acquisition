@@ -4,6 +4,7 @@
 #include <string>
 
 #include "Logic.h"
+#include "ProvisioningPolicy.h"
 
 namespace {
 
@@ -155,6 +156,65 @@ void testUploadIdentifiers() {
               "places pairing code separator");
 }
 
+void testProvisioningPolicy() {
+  const std::string first = ProvisioningPolicy::deviceIdFromHardwareId(0xaabbccddeeffULL);
+  const std::string second = ProvisioningPolicy::deviceIdFromHardwareId(0xaabbccddee00ULL);
+  expectEqual(first, "mda-aabbccddeeff", "derives canonical immutable device ID");
+  expectEqual(first == second, 0, "distinct hardware identities produce distinct logger IDs");
+  expectEqual(ProvisioningPolicy::isCanonicalDeviceId(first), 1, "accepts canonical device ID");
+  expectEqual(ProvisioningPolicy::isCanonicalDeviceId("mda-logger"), 0,
+              "rejects legacy shared logger ID");
+  expectEqual(ProvisioningPolicy::isCanonicalDeviceId("mda-000000000000"), 0,
+              "rejects unavailable all-zero hardware identity");
+  expectEqual(ProvisioningPolicy::networkAllowed(true, false), 0,
+              "unprovisioned production ESP32 cannot start networking");
+  expectEqual(ProvisioningPolicy::networkAllowed(true, true), 1,
+              "provisioned production ESP32 may start networking");
+  expectEqual(ProvisioningPolicy::networkAllowed(false, false), 1,
+              "development compatibility target retains its network path");
+
+  ProvisioningPolicy::Candidate candidate{};
+  candidate.expectedDeviceId = first;
+  candidate.friendlyName = "Workshop logger";
+  candidate.wifiSsid = "test-network";
+  candidate.wifiPassword = "password123";
+  candidate.otaPassword = "unique-ota-password";
+  candidate.protocol = ProvisioningPolicy::Protocol::Https;
+  candidate.uploadHost = "app-dev.apexilabs.com";
+  candidate.uploadPort = 443;
+  candidate.cloudflareClientId = "client.access";
+  candidate.cloudflareClientSecret = "secret";
+  candidate.appDeviceToken = "opaque-token";
+  candidate.appTokenSubject = "logger:" + first;
+  candidate.hardwareRevision = "esp32-wroom-32";
+  candidate.provisionedAt = "2026-09-05T00:00:00Z";
+  std::string error;
+  expectEqual(ProvisioningPolicy::validate(candidate, first, error), 1,
+              "accepts identity-bound HTTPS provisioning");
+
+  candidate.expectedDeviceId = second;
+  expectEqual(ProvisioningPolicy::validate(candidate, first, error), 0,
+              "fails closed on device ID mismatch");
+  candidate.expectedDeviceId = first;
+  candidate.appTokenSubject = second;
+  expectEqual(ProvisioningPolicy::validate(candidate, first, error), 0,
+              "fails closed on app bearer subject mismatch");
+  candidate.appTokenSubject = "logger:" + first;
+  candidate.wifiSsid.clear();
+  expectEqual(ProvisioningPolicy::validate(candidate, first, error), 0,
+              "rejects blank required provisioning fields");
+
+  candidate.wifiSsid = "test-network";
+  candidate.protocol = ProvisioningPolicy::Protocol::Mqtt;
+  candidate.mqttUsername = second;
+  candidate.mqttPassword = "mqtt-secret";
+  expectEqual(ProvisioningPolicy::validate(candidate, first, error), 0,
+              "fails closed on MQTT identity mismatch");
+  candidate.mqttUsername = first;
+  expectEqual(ProvisioningPolicy::validate(candidate, first, error), 1,
+              "accepts MQTT credential bound to immutable identity");
+}
+
 }  // namespace
 
 int main() {
@@ -167,6 +227,7 @@ int main() {
   testTimestampFormatting();
   testFileNameNormalization();
   testUploadIdentifiers();
+  testProvisioningPolicy();
 
   if (failures == 0) {
     std::cout << "All host logic tests passed\n";

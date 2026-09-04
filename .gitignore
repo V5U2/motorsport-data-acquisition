@@ -6,4 +6,6 @@
 .vscode/
 .build-tests/
 .omx/
+__pycache__/
+*.pyc
 include/AppSecrets.h
