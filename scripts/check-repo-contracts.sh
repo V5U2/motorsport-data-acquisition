@@ -22,6 +22,12 @@ for workflow in "$ROOT_DIR/.github/workflows/build-firmware.yml" "$ROOT_DIR/.git
 done
 
 grep -q "firmware-$PLATFORMIO_ENV" "$ROOT_DIR/.github/workflows/build-firmware.yml" || fail "build-firmware.yml artifact name does not include $PLATFORMIO_ENV"
+grep -q "dist/SHA256SUMS" "$ROOT_DIR/.github/workflows/release.yml" || \
+  fail "release.yml must publish release checksums"
+grep -q "dist/build-metadata.json" "$ROOT_DIR/.github/workflows/release.yml" || \
+  fail "release.yml must publish firmware build metadata"
+grep -q "esp32-16mb-store-forward.csv" "$ROOT_DIR/.github/workflows/release.yml" || \
+  fail "release metadata must identify the ESP32 partition layout"
 
 for macro in MDA_PIN_SPI_MISO MDA_PIN_SPI_MOSI MDA_PIN_SPI_SCLK PIN_TFT_CS PIN_TFT_DC PIN_TFT_RST PIN_STATUS_LED; do
   grep -q "#define $macro" "$ROOT_DIR/include/PinDefinitions.h" || fail "missing $macro in include/PinDefinitions.h"

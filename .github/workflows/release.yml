@@ -56,6 +56,22 @@ jobs:
             0x8000 .pio/build/esp32dev/partitions.bin \
             0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
             0x10000 .pio/build/esp32dev/firmware.bin
+          jq --null-input \
+            --arg version "$GITHUB_REF_NAME" \
+            --arg commit "$GITHUB_SHA" \
+            '{schema_version: 1, version: $version, commit_sha: $commit, targets: [{environment: "nodemcuv2", flash_size: "4MB", partition_layout: "framework default"}, {environment: "esp32dev", flash_size: "16MB", partition_layout: "partitions/esp32-16mb-store-forward.csv"}]}' \
+            > dist/build-metadata.json
+          (
+            cd dist
+            sha256sum \
+              motorsport-data-acquisition-nodemcuv2-firmware.bin \
+              motorsport-data-acquisition-nodemcuv2-firmware.elf \
+              motorsport-data-acquisition-esp32dev-firmware.bin \
+              motorsport-data-acquisition-esp32dev-firmware.elf \
+              motorsport-data-acquisition-esp32dev-factory.bin \
+              build-metadata.json \
+              > SHA256SUMS
+          )
 
       - name: Publish GitHub release
         uses: softprops/action-gh-release@v2
@@ -66,3 +82,5 @@ jobs:
             dist/motorsport-data-acquisition-esp32dev-firmware.bin
             dist/motorsport-data-acquisition-esp32dev-firmware.elf
             dist/motorsport-data-acquisition-esp32dev-factory.bin
+            dist/build-metadata.json
+            dist/SHA256SUMS
