@@ -35,8 +35,10 @@ bool StoreForwardQueue::begin(const bool enabled, const size_t maximumBytes) {
   lastError_ = "Onboard store-and-forward requires ESP32";
   return false;
 #else
-  if (!LittleFS.begin(true, "/littlefs", 10, "littlefs")) {
-    lastError_ = "LittleFS mount failed";
+  // Never format automatically here: a mount failure may be the only signal
+  // that recoverable queued telemetry still exists on the partition.
+  if (!LittleFS.begin(false, "/littlefs", 10, "littlefs")) {
+    lastError_ = "LittleFS mount failed; queue preserved for explicit recovery";
     return false;
   }
   const size_t totalBytes = LittleFS.totalBytes();

@@ -37,6 +37,12 @@ grep -q "#define TFT_RST  PIN_TFT_RST" "$ROOT_DIR/include/TFT_Setup.h" || fail "
 grep -q "docs/hardware-setup.md" "$ROOT_DIR/README.md" || fail "README.md does not point to docs/hardware-setup.md"
 grep -q "docs/repo-contracts.md" "$ROOT_DIR/AGENTS.md" || fail "AGENTS.md does not point to docs/repo-contracts.md"
 
+if grep -Eq 'LittleFS\.begin\([[:space:]]*true' "$ROOT_DIR/src/StoreForwardQueue.cpp"; then
+  fail "store-and-forward must not format LittleFS automatically on mount failure"
+fi
+grep -q 'LittleFS.begin(false' "$ROOT_DIR/src/StoreForwardQueue.cpp" || \
+  fail "store-and-forward must mount LittleFS without automatic formatting"
+
 git -C "$ROOT_DIR" check-ignore --quiet include/AppSecrets.h || \
   fail "include/AppSecrets.h must remain ignored"
 grep -q "APEXI_OTA_PASSWORD" "$ROOT_DIR/include/AppSecrets.example.h" || \
