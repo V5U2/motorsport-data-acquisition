@@ -22,6 +22,7 @@ class DeviceProvisioning {
   const char *status() const;
   const char *lastError() const;
   bool isProvisioned() const;
+  bool remoteManagementEnabled() const;
 
  private:
   void bindConfigs();
@@ -47,4 +48,5 @@ class DeviceProvisioning {
   String status_ = "unprovisioned";
   String lastError_;
   bool provisioned_ = false;
+  bool remoteManagementEnabled_ = false;
 };

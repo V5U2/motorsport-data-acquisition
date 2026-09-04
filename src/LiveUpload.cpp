@@ -20,8 +20,8 @@ constexpr uint16_t kMqttSocketTimeoutSeconds = 1;
 constexpr uint32_t kNetworkClientTimeoutMs = 500;
 constexpr uint32_t kStatusHeartbeatMs = 30000;
 constexpr uint32_t kPairingCodeRefreshMs = 10UL * 60UL * 1000UL;
-constexpr size_t kRemoteConfigJsonCapacity = 2048;
-constexpr size_t kHttpsResponseJsonCapacity = 3072;
+constexpr size_t kRemoteConfigJsonCapacity = 4096;
+constexpr size_t kHttpsResponseJsonCapacity = 5120;
 constexpr uint32_t kHttpsTimeoutMs = 4000;
 constexpr uint8_t kReplayRecordsPerCycle = 2;
 
@@ -84,11 +84,13 @@ LiveUpload::LiveUpload() : mqttClient_(networkClient_) {}
 bool LiveUpload::begin(const AppConfig::UploadConfig &config,
                        const bool enabled,
                        const bool remoteManagementEnabled,
-                       const uint32_t appliedConfigVersion) {
+                       const uint32_t appliedConfigVersion,
+                       AppBearerRotation *bearerRotation) {
   config_ = config;
   enabled_ = enabled;
   remoteManagementEnabled_ = remoteManagementEnabled;
   appliedConfigVersion_ = appliedConfigVersion;
+  bearerRotation_ = bearerRotation;
   managementStatus_ = appliedConfigVersion_ > 0 ? "applied" : "ready";
   managementError_ = "";
 
@@ -451,7 +453,56 @@ bool LiveUpload::publishStatus(const bool connected) {
   const String payload = buildStatusJson(connected);
   if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
     String response;
-    if (!postHttps("status", payload, &response)) {
+    if (bearerRotation_ != nullptr && bearerRotation_->hasCandidate()) {
+      if (bearerRotation_->phase() == AppBearerRotation::Phase::Staged) {
+        if (!postHttps("status", payload, &response, bearerRotation_->activeBearer())) {
+          if (lastHttpStatus_ >= 400 && lastHttpStatus_ < 500 &&
+              !Logic::isRetryableHttpStatus(lastHttpStatus_)) {
+            bearerRotation_->abandonCandidate();
+            managementStatus_ = "rejected";
+            managementError_ = "Credential rotation acknowledgement rejected; candidate discarded";
+            const String recoveryPayload = buildStatusJson(connected);
+            response = "";
+            if (!postHttps("status", recoveryPayload, &response,
+                           bearerRotation_->activeBearer())) {
+              return false;
+            }
+            httpsConnected_ = connected;
+            lastStatusPublishMs_ = millis();
+            consumeHttpsDesiredConfig(response);
+            return true;
+          }
+          return false;
+        }
+        if (!bearerRotation_->markAcknowledged()) {
+          managementStatus_ = "rejected";
+          managementError_ = bearerRotation_->lastError();
+          return false;
+        }
+      } else {
+        if (postHttps("status", payload, &response, bearerRotation_->candidateBearer())) {
+          if (!bearerRotation_->promoteCandidate()) {
+            managementStatus_ = "pending";
+            managementError_ = bearerRotation_->lastError();
+            return false;
+          }
+          managementStatus_ = "applied";
+          managementError_ = "";
+        } else {
+          // A rejected or not-yet-active candidate must never destroy the old
+          // credential. Use the overlap bearer for service continuity and retry
+          // the durable candidate on the next heartbeat.
+          response = "";
+          if (!postHttps("status", payload, &response, bearerRotation_->activeBearer())) {
+            return false;
+          }
+          managementStatus_ = "pending";
+          managementError_ = "New app bearer not accepted; old bearer retained";
+        }
+      }
+    } else if (!postHttps("status", payload, &response,
+                          bearerRotation_ == nullptr ? nullptr
+                                                     : bearerRotation_->activeBearer())) {
       return false;
     }
     httpsConnected_ = connected;
@@ -497,14 +548,55 @@ bool LiveUpload::consumeDesiredState(const uint8_t *payload, const unsigned int 
   if (!parseAssignment(document["assignment"].as<JsonObjectConst>())) {
     return false;
   }
+  if (!parseCredentialRotation(document["credential_rotation"].as<JsonObjectConst>())) {
+    return false;
+  }
   if (version > appliedConfigVersion_) {
     pendingRemoteConfig_ = candidate;
     hasPendingRemoteConfig_ = true;
+    managementStatus_ = "pending";
+  } else if (bearerRotation_ != nullptr && bearerRotation_->hasCandidate()) {
     managementStatus_ = "pending";
   } else {
     managementStatus_ = "applied";
   }
   managementError_ = "";
+  return true;
+}
+
+bool LiveUpload::parseCredentialRotation(const JsonObjectConst rotation) {
+  if (rotation.isNull()) {
+    return true;
+  }
+  if (config_.protocol != AppConfig::UploadConfig::Protocol::Https ||
+      bearerRotation_ == nullptr ||
+      String(rotation["type"].as<const char *>()) != "app_bearer" ||
+      !rotation["version"].is<uint32_t>() ||
+      !rotation["nonce"].is<const char *>() ||
+      !rotation["token"].is<const char *>() ||
+      !rotation["overlap_expires_at"].is<const char *>()) {
+    return false;
+  }
+  for (JsonPairConst item : rotation) {
+    const String key = item.key().c_str();
+    if (key != "type" && key != "version" && key != "nonce" && key != "token" &&
+        key != "overlap_expires_at") {
+      return false;
+    }
+  }
+  const AppBearerRotation::StageResult result = bearerRotation_->stage(
+      rotation["version"].as<uint32_t>(),
+      String(rotation["nonce"].as<const char *>()),
+      String(rotation["token"].as<const char *>()),
+      String(rotation["overlap_expires_at"].as<const char *>()));
+  if (result == AppBearerRotation::StageResult::Rejected ||
+      result == AppBearerRotation::StageResult::StorageFault) {
+    managementError_ = bearerRotation_->lastError();
+    return false;
+  }
+  managementStatus_ = result == AppBearerRotation::StageResult::AlreadyApplied
+                          ? "applied"
+                          : "pending";
   return true;
 }
 
@@ -649,7 +741,10 @@ bool LiveUpload::replayQueuedSnapshot() {
   return false;
 }
 
-bool LiveUpload::postHttps(const char *kind, const String &payload, String *responseBody) {
+bool LiveUpload::postHttps(const char *kind,
+                           const String &payload,
+                           String *responseBody,
+                           const char *bearer) {
   lastHttpsAttemptMs_ = millis();
   HTTPClient http;
   http.setTimeout(kHttpsTimeoutMs);
@@ -670,7 +765,14 @@ bool LiveUpload::postHttps(const char *kind, const String &payload, String *resp
     return false;
   }
   http.addHeader("Content-Type", "application/json");
-  http.addHeader("Authorization", "Bearer " + String(config_.appDeviceToken));
+  const char *effectiveBearer = bearer;
+  if (effectiveBearer == nullptr && bearerRotation_ != nullptr) {
+    effectiveBearer = bearerRotation_->activeBearer();
+  }
+  if (effectiveBearer == nullptr) {
+    effectiveBearer = config_.appDeviceToken;
+  }
+  http.addHeader("Authorization", "Bearer " + String(effectiveBearer));
   http.addHeader("CF-Access-Client-Id", config_.cloudflareAccessClientId);
   http.addHeader("CF-Access-Client-Secret", config_.cloudflareAccessClientSecret);
 #if defined(ESP8266)
@@ -764,6 +866,12 @@ String LiveUpload::buildStatusJson(const bool connected) const {
     json += "\"friendly_name\":\"" + jsonEscape(friendlyName_) + "\",";
     json += "\"hardware_revision\":\"" + jsonEscape(hardwareRevision_) + "\",";
     json += "\"provisioned_at\":\"" + jsonEscape(provisionedAt_) + "\",";
+    if (bearerRotation_ != nullptr && bearerRotation_->hasAppliedAcknowledgement()) {
+      json += "\"credential_rotation_ack\":{";
+      json += "\"version\":" + String(bearerRotation_->version()) + ",";
+      json += "\"nonce\":\"" + jsonEscape(bearerRotation_->nonce()) + "\",";
+      json += "\"state\":\"applied\"},";
+    }
     json += "\"settings\":{";
     json += "\"upload_enabled\":" + String(reportedUploadEnabled_ ? "true" : "false") + ",";
     json += "\"ntp_primary\":\"" + jsonEscape(reportedNtpPrimary_) + "\",";

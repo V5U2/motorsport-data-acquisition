@@ -7,7 +7,9 @@
 
 class RuntimeSettings {
  public:
-  bool begin(const AppConfig::UploadConfig &defaults, bool defaultUploadEnabled);
+  bool begin(const AppConfig::UploadConfig &defaults,
+             bool defaultUploadEnabled,
+             bool defaultRemoteManagementEnabled = false);
   bool save(const String &host,
             uint16_t port,
             bool enabled,
@@ -135,7 +137,8 @@ class RuntimeSettings {
   static bool validText(const String &value, size_t capacity);
   void populateDefaults(Record &record,
                         const AppConfig::UploadConfig &defaults,
-                        bool defaultUploadEnabled);
+                        bool defaultUploadEnabled,
+                        bool defaultRemoteManagementEnabled);
   void apply(const Record &record);
 
   AppConfig::UploadConfig defaults_{};

@@ -30,6 +30,16 @@ class SecuritySurfaceTests(unittest.TestCase):
         self.assertIn("if (!localSettingsEnabled_)", self.web_ui)
         self.assertGreaterEqual(self.web_ui.count("server_.send(410"), 2)
 
+    def test_rotation_status_contains_ack_but_no_bearer(self) -> None:
+        live_upload = (ROOT / "src" / "LiveUpload.cpp").read_text(encoding="utf-8")
+        start = live_upload.index("String LiveUpload::buildStatusJson")
+        end = live_upload.index("String LiveUpload::buildSnapshotJson", start)
+        status_builder = live_upload[start:end]
+        self.assertIn("credential_rotation_ack", status_builder)
+        self.assertNotIn("candidateBearer", status_builder)
+        self.assertNotIn("activeBearer", status_builder)
+        self.assertNotIn('\\"token\\"', status_builder)
+
 
 if __name__ == "__main__":
     unittest.main()

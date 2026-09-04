@@ -22,6 +22,9 @@ class String {
     value_ = value == nullptr ? "" : value;
     return *this;
   }
+  char operator[](size_t index) const { return value_[index]; }
+  bool operator==(const String &other) const { return value_ == other.value_; }
+  bool operator!=(const String &other) const { return !(*this == other); }
 
  private:
   std::string value_;

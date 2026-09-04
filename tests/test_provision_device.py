@@ -35,6 +35,15 @@ class ProvisionDeviceTests(unittest.TestCase):
     def test_accepts_identity_bound_bundle(self):
         validated = provision_device.validate_bundle(bundle(), "mda-aabbccddeeff")
         self.assertEqual(validated["expected_device_id"], "mda-aabbccddeeff")
+        self.assertFalse(validated["remote_management_enabled"])
+
+        managed = bundle()
+        managed["remote_management_enabled"] = True
+        self.assertTrue(
+            provision_device.validate_bundle(managed, "mda-aabbccddeeff")[
+                "remote_management_enabled"
+            ]
+        )
 
     def test_rejects_blank_malformed_and_mismatched_identity(self):
         with self.assertRaises(provision_device.ProvisioningError):
@@ -63,6 +72,10 @@ class ProvisionDeviceTests(unittest.TestCase):
         blank_timestamp["provisioned_at"] = ""
         with self.assertRaisesRegex(provision_device.ProvisioningError, "provisioned_at"):
             provision_device.validate_bundle(blank_timestamp, "mda-aabbccddeeff")
+        invalid_management = bundle()
+        invalid_management["remote_management_enabled"] = "yes"
+        with self.assertRaisesRegex(provision_device.ProvisioningError, "remote_management_enabled"):
+            provision_device.validate_bundle(invalid_management, "mda-aabbccddeeff")
 
     def test_duplicate_inventory_fails_closed_and_contains_no_secrets(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -57,6 +57,10 @@ def validate_bundle(bundle: dict[str, Any], observed_device_id: str) -> dict[str
     _text(result.get("hardware_revision"), "hardware_revision", 31)
     _text(result.get("provisioned_at"), "provisioned_at", 40)
     _text(result.get("ota_password"), "ota_password", 127, 12)
+    remote_management = result.get("remote_management_enabled", False)
+    if not isinstance(remote_management, bool):
+        raise ProvisioningError("remote_management_enabled must be boolean")
+    result["remote_management_enabled"] = remote_management
     wifi = result.get("wifi")
     upload = result.get("upload")
     if not isinstance(wifi, dict):

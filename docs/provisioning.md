@@ -36,6 +36,29 @@ Before transfer, revoke the existing app bearer, Cloudflare service token or MQT
 
 If a bundle names a different `expected_device_id`, a bearer subject differs, an MQTT username differs, a required value is blank/malformed, or the factory hardware revision conflicts, firmware fails closed and does not start networking with that record. A partial persistence failure clears the owner namespace instead of booting with mixed credentials.
 
+## App bearer rotation
+
+When optional remote management is enabled for an HTTPS logger, the app may
+deliver `desired_config.credential_rotation` containing an `app_bearer` type,
+monotonic version, nonce, candidate token, and overlap expiry. The ESP32 stores
+the candidate in the encrypted `apexi_auth` NVS namespace before acknowledging
+it. The old bearer sends `management.credential_rotation_ack` with the matching
+version and nonce and state `applied`; only after that acknowledgement succeeds
+does the logger probe status with the candidate. The old bearer remains stored
+until the candidate receives a successful authenticated response, at which point
+the candidate is promoted and later status heartbeats retain the non-secret
+acknowledgement.
+
+The staged/acknowledged phases and both bearers survive restart. A transport
+failure retries without changing credentials. A permanent acknowledgement
+rejection discards only the candidate and resumes the old bearer, allowing a new
+authorized rotation. A rejected candidate falls back to the old bearer during
+the overlap and is retried; if both credentials are rejected after the overlap,
+use the physical owner reset and server-authorized re-provisioning procedure.
+Neither bearer is placed in status JSON, diagnostics, serial logs, inventory, or
+release evidence. Credential rotation is ESP32-only because the ESP8266 target
+does not provide the production encrypted-NVS contract.
+
 ## Factory reset and recovery
 
 With the ESP32 powered, hold the physical UI button continuously for five seconds during boot. The device clears the owner NVS namespace and the flash-backed runtime settings, then restarts. It preserves the eFuse-derived identity and factory hardware revision. Network, transport, app, Cloudflare, MQTT, OTA/settings, friendly-name, and remote-management state are removed. Re-provision over USB before the logger can join a network again.
