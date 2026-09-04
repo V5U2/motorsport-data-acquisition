@@ -19,7 +19,7 @@ At startup, firmware scans every record from the committed head. A complete reco
 | Mount failure | Firmware does not request a format. It reports a fault and leaves every file untouched. |
 | Invalid server response during replay | Retryable failures remain queued. A permanently rejected record is explicitly popped and increments the drop counter. |
 
-The ingest API must therefore remain idempotent for a device/session/sequence identity. At-least-once replay can repeat an acknowledged snapshot after an interrupted metadata commit, but it must not create duplicate final state.
+The ingest API must therefore remain idempotent for a device/session/sequence identity. At-least-once replay can repeat an acknowledged snapshot after an interrupted metadata commit, but it must not create duplicate final state. The managed HTTPS receiver derives a stable identity from kind, device, source session, sequence, and timestamp, then writes the same InfluxDB series/timestamp on every exact retry. A `202` response acknowledges durable TSDB acceptance; `408`, `425`, `429`, transport failures, and `5xx` remain queued, while permanent `400`, `404`, `413`, and `422` rejects are dropped and counted.
 
 ## Capacity and endurance
 
