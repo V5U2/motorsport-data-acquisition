@@ -10,6 +10,8 @@ At startup, firmware scans every record from the committed head. A complete reco
 
 ## Interruption semantics
 
+Metadata v2's reserved flag byte now preserves uncertainty about historical drop counts after metadata-loss recovery. A nonzero flag causes periodic status to omit `system.store_forward_dropped_records`; rescanned pending records remain reportable. Existing v1/v2 metadata with a known count remains compatible. Drop increments saturate at the unsigned 32-bit maximum. See the [status diagnostics contract](status-diagnostics.md).
+
 | Interruption | Deterministic result after reboot |
 | --- | --- |
 | During record append | The last incomplete record is quarantined; the preceding valid records remain ordered and replayable. |

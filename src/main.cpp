@@ -124,6 +124,8 @@ AppState buildState() {
   state.uptime = String(Logic::formatUptime(uptimeMs).c_str());
   state.timestamp = timekeeper.logTimestamp(state.uptimeMs);
   state.transportTimestamp = timekeeper.transportTimestamp(state.uptimeMs);
+  liveUpload.setClockFault((AppConfig::kFeatures.rtcEnabled && !rtcReady) ||
+                          !state.transportTimestamp.endsWith("Z"));
   state.system.deviceId = deviceProvisioning.deviceId();
   state.system.deviceName = deviceProvisioning.friendlyName();
   state.system.hardwareRevision = deviceProvisioning.hardwareRevision();
@@ -447,6 +449,7 @@ void setup() {
   const AppState initialState = buildState();
   dashboard.render(initialState);
   webUi.publishState(initialState);
+  liveUpload.recordCompletedBoot();
 }
 
 void loop() {
@@ -469,6 +472,8 @@ void loop() {
       Serial.flush();
       delay(250);
       ESP.restart();
+    } else {
+      liveUpload.rejectRemoteConfig();
     }
   }
   if (otaReady) {

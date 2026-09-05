@@ -1,4 +1,5 @@
 #include "StoreForwardQueue.h"
+#include "StatusDiagnostics.h"
 
 #if defined(ESP32)
 #include <LittleFS.h>
@@ -70,6 +71,11 @@ bool StoreForwardQueue::begin(const bool enabled, const size_t maximumBytes) {
     metadata_.magic = kMetadataMagic;
     metadata_.version = kMetadataVersion;
     metadata_.activeSegment = 0;
+    // Recovered contents cannot establish how many records were dropped before
+    // metadata loss. Persist this uncertainty using the reserved v2 flag byte.
+    metadata_.reserved = LittleFS.exists(kMetadataPath) ||
+                         LittleFS.exists(segmentPath(0)) || LittleFS.exists(segmentPath(1)) ||
+                         LittleFS.exists(quarantinePath(0)) || LittleFS.exists(quarantinePath(1)) ? 1 : 0;
     for (uint8_t segment = 0; segment < 2; ++segment) {
       File quarantine = LittleFS.open(quarantinePath(segment), FILE_READ);
       if (quarantine && quarantine.size() > 0) {
@@ -202,7 +208,7 @@ bool StoreForwardQueue::pop(const bool discarded) {
   metadata_.head[segment] += sizeof(header) + header.length;
   --count_[segment];
   if (discarded) {
-    ++metadata_.droppedRecords;
+    metadata_.droppedRecords = StatusDiagnostics::saturatingAdd(metadata_.droppedRecords);
   }
   // Commit the acknowledgement before reclaiming the segment. If power is
   // lost or metadata persistence fails, the record remains available for
@@ -225,6 +231,14 @@ bool StoreForwardQueue::pop(const bool discarded) {
 
 bool StoreForwardQueue::isEnabled() const { return enabled_; }
 bool StoreForwardQueue::isReady() const { return ready_; }
+
+bool StoreForwardQueue::droppedRecordsKnown() const {
+#if defined(ESP32)
+  return ready_ && metadata_.reserved == 0;
+#else
+  return false;
+#endif
+}
 
 uint32_t StoreForwardQueue::pendingRecords() const {
 #if defined(ESP32)
@@ -445,7 +459,7 @@ bool StoreForwardQueue::rotateSegment() {
   const uint8_t next = metadata_.activeSegment == 0 ? 1 : 0;
   const uint32_t recordsToDrop = count_[next];
   if (recordsToDrop > 0) {
-    metadata_.droppedRecords += recordsToDrop;
+    metadata_.droppedRecords = StatusDiagnostics::saturatingAdd(metadata_.droppedRecords, recordsToDrop);
     // Record the capacity loss before reclaiming its bytes. A reset can then
     // either replay the still-present segment or observe the committed drop;
     // it cannot silently erase records without incrementing the counter.

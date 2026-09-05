@@ -34,6 +34,8 @@ void testAppendReplayAndReboot() {
   LittleFS.reset();
   StoreForwardQueue queue;
   expect(queue.begin(true, 256), "queue starts");
+  expect(queue.droppedRecordsKnown() && queue.droppedRecords() == 0,
+         "fresh queue has observed zero drops");
   expect(queue.enqueue("alpha"), "first append succeeds");
   expect(queue.enqueue("bravo"), "second append succeeds");
 
@@ -57,6 +59,7 @@ void testMountFailureNeverFormats() {
   LittleFS.setMountResult(false);
   StoreForwardQueue failedBoot;
   expect(!failedBoot.begin(true, 256), "mount failure is reported");
+  expect(!failedBoot.droppedRecordsKnown(), "unmounted queue has no observed drop total");
   expect(!LittleFS.lastFormatOnFail(), "mount does not request formatting");
   expect(LittleFS.bytes("/sfq-0.log") == before, "mount failure preserves bytes");
 
@@ -134,6 +137,10 @@ void testCorruptMetadataSalvagesRecords() {
   String payload;
   expect(rebooted.begin(true, 256), "corrupt metadata is rebuilt");
   expect(rebooted.peek(payload) && text(payload) == "salvage", "record survives metadata rebuild");
+  expect(!rebooted.droppedRecordsKnown(), "metadata loss cannot invent a zero drop total");
+  StoreForwardQueue secondReboot;
+  expect(secondReboot.begin(true, 256), "recovered queue remounts");
+  expect(!secondReboot.droppedRecordsKnown(), "drop uncertainty persists after restart");
 }
 
 void testVersionOneMetadataMigratesWithoutLosingCounters() {

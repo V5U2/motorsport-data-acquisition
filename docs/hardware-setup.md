@@ -186,6 +186,9 @@ When using receiver modules:
 - Update the engineering conversion assumptions in [`include/AppConfig.h`](../include/AppConfig.h) if the module output scaling no longer matches the original shunt-based design.
 
 ## Commissioning checklist
+
+For alert commissioning, follow the [periodic status diagnostics contract](status-diagnostics.md). Confirm observed queue/time/configuration signals and increasing transport/boot counters; unavailable hardware or counters must appear as missing fields rather than synthetic healthy zeros.
+
 1. Follow the [provisioning runbook](provisioning.md), record the non-secret immutable device ID, and verify it matches the app credential subject.
 2. Confirm the sensor supply voltage and compliance requirement from the actual transmitter datasheets.
 3. Verify the receiver module output voltage at 4 mA and 20 mA before connecting it to the ADS1115.
