@@ -223,7 +223,12 @@ def provision_serial(
                 if line == "PROVISIONING_RESULT=accepted":
                     return
                 if line.startswith("PROVISIONING_RESULT=rejected"):
-                    raise ProvisioningError("logger explicitly rejected provisioning record")
+                    # Legacy firmware can reject after committing owner state
+                    # without proving that its rollback succeeded.
+                    raise ProvisioningIndeterminate(
+                        "logger rejected provisioning but credential cleanup is unconfirmed; "
+                        "inspect the device before retrying"
+                    )
             raise ProvisioningIndeterminate(
                 "logger acknowledgement was not received; inventory remains indeterminate"
             )
