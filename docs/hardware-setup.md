@@ -191,6 +191,8 @@ If USB provisioning is interrupted or rejected, follow the [indeterminate invent
 
 For alert commissioning, follow the [periodic status diagnostics contract](status-diagnostics.md). Confirm observed queue/time/configuration signals and increasing transport/boot counters; unavailable hardware or counters must appear as missing fields rather than synthetic healthy zeros.
 
+ESP32 HTTPS now runs in a dedicated worker; capture persists each snapshot before transmission, including while connected. See the [nonblocking upload contract](store-forward-recovery.md) for RAM bounds, oldest-record diagnostics, retry ordering and increased flash-write costs. Physical commissioning must measure 10 ms sampling deadlines during flash append/acknowledgement, slow TLS, outages, reconnect replay and OTA activity. Worker separation alone does not qualify flash endurance or watchdog behavior; ESP8266 HTTPS and MQTT remain synchronous.
+
 1. Follow the [provisioning runbook](provisioning.md), record the non-secret immutable device ID, and verify it matches the app credential subject.
 2. Confirm the sensor supply voltage and compliance requirement from the actual transmitter datasheets.
 3. Verify the receiver module output voltage at 4 mA and 20 mA before connecting it to the ADS1115.

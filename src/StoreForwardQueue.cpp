@@ -181,6 +181,13 @@ bool StoreForwardQueue::peek(String &payload) {
 #endif
 }
 
+bool StoreForwardQueue::popIfMatches(const String &submitted, const bool discarded) {
+  String current;
+  if (!peek(current)) return pendingRecords() == 0;
+  if (current != submitted) return true;  // Already removed by visible capacity policy.
+  return pop(discarded);
+}
+
 bool StoreForwardQueue::pop(const bool discarded) {
 #if !defined(ESP32)
   (void)discarded;

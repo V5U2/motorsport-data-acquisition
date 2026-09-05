@@ -8,7 +8,7 @@ Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and das
 - Logs CSV data to microSD with RTC timestamps when RTC hardware is fitted
 - Serves a lightweight Wi-Fi dashboard and CSV download endpoints
 - Publishes live telemetry over MQTT or authenticated HTTPS when station Wi-Fi and upstream settings are configured
-- Buffers retryable HTTPS failures in a persistent circular onboard-flash queue on the 16 MB ESP32 target and replays them oldest-first after recovery
+- Persists ESP32 HTTPS snapshots before transmission and replays them oldest-first through a nonblocking network worker
 - Lights the NodeMCU built-in LED steadily once firmware setup begins
 - Keeps pin mapping, sensor calibration, and refresh rates in one config file
 - Synchronises the RV-3028 from NTP at every networked boot and hourly thereafter, while retaining RTC holdover when offline
@@ -98,7 +98,7 @@ The default clock configuration uses `pool.ntp.org`, `time.google.com`, POSIX ti
 
 Dashboard uptime is displayed as `DD:HH:mm:ss`. The live API retains numeric `uptime_ms` for compatibility and also exposes the formatted value as `uptime`.
 
-The ESP32 target uses the checked-in 16 MB partition table: two 2 MB OTA application slots plus an approximately 12 MB LittleFS partition. Store-and-forward is capped at 10 MB and split across two append-only segments; when capacity is exhausted, rotation drops the oldest remaining segment and reports the drop count. Only failed HTTPS snapshots are written, limiting flash wear during normal connected operation. A mount failure is reported without automatically formatting the partition, preserving queued data for explicit recovery. Invalid tails are checksummed and quarantined before repair, and acknowledgement metadata is committed before an empty segment is reclaimed. The [store-and-forward recovery contract](docs/store-forward-recovery.md) defines format compatibility, interruption outcomes, capacity/endurance estimates, and the destructive recovery procedure. The NodeMCU target keeps its existing 4 MB layout and does not enable this queue.
+The ESP32 target uses the checked-in 16 MB partition table: two 2 MB OTA application slots plus an approximately 12 MB LittleFS partition. Store-and-forward is capped at 10 MB and split across two append-only segments; when capacity is exhausted, rotation drops the oldest remaining segment and reports the drop count. Snapshots are persisted before submission to a single-request HTTP worker, keeping network waits off the sampling task and preserving replay order. This increases flash writes even during healthy operation; physical endurance and flash latency qualification remain required. A mount failure is reported without automatically formatting the partition, preserving queued data for explicit recovery. Invalid tails are checksummed and quarantined before repair, and acknowledgement metadata is committed before an empty segment is reclaimed. The [store-and-forward recovery contract](docs/store-forward-recovery.md) defines scheduling, format compatibility, interruption outcomes, capacity/endurance estimates, and the destructive recovery procedure. The NodeMCU target keeps its existing 4 MB layout, synchronous HTTPS behavior, and no onboard queue.
 
 Production brokers require authentication. USB provisioning requires the MQTT username to equal the immutable device ID; the broker ACL uses that identity to limit the device to publishing `<topicPrefix>/<deviceId>/live` and `<topicPrefix>/<deviceId>/status`. When remote management is enabled, it may additionally read only its own `<topicPrefix>/<deviceId>/config/desired` topic. Keep the matching password in the encrypted infrastructure vault.
 
@@ -108,7 +108,7 @@ Current behavior:
 - Each message includes `schema_version`, a normalized `device_id`, a per-boot `session_id`, a monotonic `sequence`, the current timestamp, and the current sensor values.
 - The retained MQTT status topic now reflects both online and offline state so downstream consumers do not keep stale liveness.
 - The firmware exposes live upload state through the local web UI and `/api/live`.
-- The ESP32 local UI exposes onboard queue readiness, pending records/bytes, drops, corruption repairs, quarantined bytes, and queue errors.
+- The ESP32 local UI exposes onboard queue readiness, pending records/bytes, drops, corruption repairs, quarantined bytes, queue errors, oldest-record identity/age, and per-boot capture drops. Unknown age is not reported as zero.
 - Local SD logging remains optional for long-duration/removable CSV archives.
 
 ### Starting and stopping a live session
@@ -184,6 +184,7 @@ Example live payload shape:
 
 ## Host-side tests
 - USB provisioning tests also cover write/flush/read interruption, partial writes, and unconfirmed cleanup after rejection, keeping an indeterminate reservation when device state is unknown.
+- HTTPS host tests cover bounded immutable worker exchange, non-waiting polling during a held request, failed-heartbeat fairness/backoff, timestamp validity, and late acknowledgements after queue capacity rotation.
 - Run `./scripts/run-host-tests.sh` to execute hardware-independent logic tests on a desktop machine.
 - These tests cover sensor conversion and faults, timestamps, filenames, identity derivation, malformed or mismatched provisioning, duplicate fleet IDs, and secret-free inventory output.
 - GitHub Actions is configured to run the repo fast verification path on pushes and pull requests in [host-tests.yml](.github/workflows/host-tests.yml).

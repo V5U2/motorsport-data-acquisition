@@ -6,7 +6,6 @@
 #include <ESP8266HTTPClient.h>
 #include <ESP8266WiFi.h>
 #else
-#include <HTTPClient.h>
 #include <WiFi.h>
 #include <esp_system.h>
 #endif
@@ -132,11 +131,17 @@ bool LiveUpload::begin(const AppConfig::UploadConfig &config,
     }
     httpsClient_.setTrustAnchors(httpsTrustAnchor_.get());
 #else
-    httpsClient_.setCACert(kIsrgRootX1);
+    if (!httpsWorker_.begin(kIsrgRootX1)) {
+      lastError_ = "HTTPS worker allocation failed";
+      return false;
+    }
 #endif
     httpsClient_.setTimeout(kHttpsTimeoutMs);
     storeForwardQueue_.begin(AppConfig::kStoreForward.enabled,
                              AppConfig::kStoreForward.maximumBytes);
+#if defined(ESP32)
+    refreshQueueOldest();
+#endif
     lastError_ = "";
     return true;
   }
@@ -165,6 +170,17 @@ void LiveUpload::loop() {
   }
 
   const uint32_t nowMs = millis();
+#if defined(ESP32)
+  if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    if (remoteManagementEnabled_ &&
+        Logic::intervalElapsed(nowMs, pairingCodeGeneratedMs_, kPairingCodeRefreshMs)) {
+      rotatePairingCode(nowMs);
+      httpsStatusRequested_ = true;
+    }
+    serviceHttps(nowMs);
+    return;
+  }
+#endif
   if (remoteManagementEnabled_ &&
       Logic::intervalElapsed(nowMs, pairingCodeGeneratedMs_, kPairingCodeRefreshMs)) {
     rotatePairingCode(nowMs);
@@ -201,6 +217,9 @@ bool LiveUpload::publishIfDue(const AppState &state) {
   if (!enabled_) {
     return false;
   }
+#if defined(ESP32)
+  if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) return captureHttps(state);
+#endif
 
   const uint32_t nowMs = millis();
   const bool snapshotDue = (nowMs - lastPublishMs_) >= config_.publishIntervalMs;
@@ -459,6 +478,12 @@ void LiveUpload::publishOfflineStatusAndDisconnect() {
 }
 
 bool LiveUpload::publishStatus(const bool connected) {
+#if defined(ESP32)
+  if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    httpsStatusRequested_ = true;
+    return false;  // Requested is not a server acknowledgement.
+  }
+#endif
   const String payload = buildStatusJson(connected);
   if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
     String response;
@@ -758,6 +783,15 @@ bool LiveUpload::postHttps(const char *kind,
                            const String &payload,
                            String *responseBody,
                            const char *bearer) {
+#if defined(ESP32)
+  // ESP32 callers use serviceHttps()/HttpsWorker. Never fall back to inline
+  // DNS, TCP, TLS, HTTP, or response reads on the Arduino sampling task.
+  (void)kind;
+  (void)payload;
+  (void)responseBody;
+  (void)bearer;
+  return false;
+#else
   lastHttpsAttemptMs_ = millis();
   diagnostics_.transportAttempt(httpsRecoveryPending_);
   HTTPClient http;
@@ -825,13 +859,20 @@ bool LiveUpload::postHttps(const char *kind,
   lastPostRetryable_ = false;
   httpsRecoveryPending_ = false;
   return true;
+#endif
 }
 
 void LiveUpload::consumeHttpsDesiredConfig(const String &responseBody) {
   if (!remoteManagementEnabled_ || responseBody.isEmpty()) {
     return;
   }
+#if defined(ESP32)
+  // Response parsing nests desired-state parsing (another 4 KiB document).
+  // Keep this bounded buffer off Arduino's 8 KiB sampling-task stack.
+  DynamicJsonDocument document(kHttpsResponseJsonCapacity);
+#else
   StaticJsonDocument<kHttpsResponseJsonCapacity> document;
+#endif
   if (deserializeJson(document, responseBody) != DeserializationError::Ok ||
       !document["desired_config"].is<JsonObject>()) {
     return;

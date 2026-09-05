@@ -175,6 +175,8 @@ AppState buildState() {
   state.system.storeForwardCorruptionEvents = liveUpload.storeForwardCorruptionEvents();
   state.system.storeForwardQuarantinedBytes = liveUpload.storeForwardQuarantinedBytes();
   state.system.storeForwardError = liveUpload.storeForwardError();
+  state.system.storeForwardOldestJson = liveUpload.queueOldestDiagnostics();
+  state.system.uploadCaptureDrops = liveUpload.uploadCaptureDrops();
   return state;
 }
 
