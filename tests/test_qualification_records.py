@@ -16,6 +16,28 @@ SPEC.loader.exec_module(validator)
 
 
 class QualificationRecordTests(unittest.TestCase):
+    def test_ragged_rows_are_rejected_for_every_schema(self):
+        for kind, (template, _) in validator.SCHEMAS.items():
+            header = (validator.TEMPLATE_DIR / template).read_text()
+            width = len(next(csv.reader([header.strip()])))
+            for row in ("truncated\n", ",".join([""] * (width + 1)) + "\n"):
+                with self.subTest(kind=kind, row=row):
+                    with tempfile.TemporaryDirectory() as directory:
+                        path = Path(directory) / f"{kind}-result.csv"
+                        path.write_text(header + row)
+                        self.assertIn("row width", validator.validate(path)[0])
+
+    def test_quoted_commas_are_valid(self):
+        template = validator.TEMPLATE_DIR / "manufacturing-checklist-template.csv"
+        fields = next(csv.reader([template.read_text().strip()]))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "manufacturing-result.csv"
+            with path.open("w", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields)
+                writer.writeheader()
+                writer.writerow({"result": "not_run", "notes": "awaiting fixture, operator"})
+            self.assertEqual([], validator.validate(path))
+
     def test_checked_in_templates_match_their_schemas(self):
         for template_name, _required in validator.SCHEMAS.values():
             self.assertEqual(

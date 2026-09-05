@@ -147,8 +147,26 @@ bool AppBearerRotation::markAcknowledged() {
   if (!hasCandidate()) {
     return false;
   }
+  // The complete candidate is already durable. Change only its phase; clearing
+  // cand_ready here would lose the candidate on a power cut after server ack.
+#if defined(ESP32)
+  Preferences auth;
+  if (!auth.begin(kNamespace, false)) {
+    lastError_ = "credential rotation store unavailable";
+    return false;
+  }
+  const bool saved = auth.putUChar("phase", static_cast<uint8_t>(Phase::Acknowledged)) > 0;
+  auth.end();
+  if (!saved) {
+    lastError_ = "credential rotation acknowledgement persistence failed";
+    return false;
+  }
+#elif defined(APEXI_HOST_TEST)
+  hostRecord.phase = Phase::Acknowledged;
+#endif
   phase_ = Phase::Acknowledged;
-  return persistCandidate(phase_);
+  lastError_ = "";
+  return true;
 }
 
 bool AppBearerRotation::promoteCandidate() {
@@ -227,7 +245,9 @@ bool AppBearerRotation::hasCandidate() const {
   return phase_ != Phase::None && !candidateBearer_.isEmpty();
 }
 bool AppBearerRotation::hasAppliedAcknowledgement() const {
-  return hasCandidate() || (appliedVersion_ > 0 && !appliedNonce_.isEmpty());
+  // Candidate proof and later heartbeats must omit the ack: the server can
+  // already be complete if its proof response was lost or promotion failed.
+  return hasCandidate() && phase_ == Phase::Staged;
 }
 const String &AppBearerRotation::lastError() const { return lastError_; }
 

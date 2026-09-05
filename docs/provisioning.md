@@ -46,8 +46,16 @@ it. The old bearer sends `management.credential_rotation_ack` with the matching
 version and nonce and state `applied`; only after that acknowledgement succeeds
 does the logger probe status with the candidate. The old bearer remains stored
 until the candidate receives a successful authenticated response, at which point
-the candidate is promoted and later status heartbeats retain the non-secret
-acknowledgement.
+the candidate is promoted. Candidate proof requests, proof retries, and later
+heartbeats omit the acknowledgement, including after reboot: the app rejects
+acknowledgements for completed rotations. Version/nonce metadata remains stored
+to reject stale commands.
+
+After server acknowledgement, only the NVS phase key is committed; the durable
+candidate stays valid throughout. A failed phase write keeps the logger staged
+and prevents candidate proof. Host tests exercise the ESP32 persistence branch
+with failed writes and power cuts around this transition; physical NVS cutover
+acceptance remains required.
 
 The staged/acknowledged phases and both bearers survive restart. A transport
 failure retries without changing credentials. A permanent acknowledgement

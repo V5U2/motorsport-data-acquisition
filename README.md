@@ -87,7 +87,9 @@ HTTPS ESP32 loggers also consume app-managed bearer rotation. A candidate is
 durably staged, acknowledged with the old bearer, and promoted only after the
 new bearer proves it can authenticate. The old bearer is retained across retry
 and power loss until proof succeeds. Status reports only rotation version, nonce,
-and state; bearer values never appear in telemetry, diagnostics, or logs. See
+and state while acknowledgement is pending; candidate proof and subsequent
+heartbeats omit completed acknowledgements. Bearer values never appear in
+telemetry, diagnostics, or logs. See
 [ESP32 identity and provisioning](docs/provisioning.md) for recovery behavior.
 
 The same desired document carries a planned-session assignment independently of configuration version. The logger accepts only `unassigned`, `armed`, `claimed`, `finished`, `revoked`, or `expired`, reports the last accepted state in subsequent heartbeats, and never replaces its firmware-generated per-boot source session ID. Missing, stale, or invalid assignment state cannot interrupt sensor acquisition or local SD capture; first-source routing and the canonical recording ID remain server responsibilities.
