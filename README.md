@@ -13,7 +13,7 @@ Arduino/PlatformIO firmware for a configurable 4-20 mA motorsport logger and das
 - Keeps pin mapping, sensor calibration, and refresh rates in one config file
 - Synchronises the RV-3028 from NTP at every networked boot and hourly thereafter, while retaining RTC holdover when offline
 - Derives an immutable per-board ESP32 identity and loads owner credentials from an identity-bound USB provisioning record
-- Disables fallback AP, password OTA, and local HTTP settings on ESP32; production-candidate builds also fail closed unless Secure Boot and flash encryption are active
+- Disables fallback AP, password OTA, and local HTTP settings on ESP32; production-candidate networking/update gates also require secure SDK, encrypted storage and reviewed encrypted-queue qualification
 
 ## Required hardware
 
@@ -49,6 +49,8 @@ Primary source files:
 ## Release artifacts
 
 Tagged releases currently publish development artifacts. They are immutable and checksummed, but are not signed production images. NodeMCU/ESP8266 is not a supported production target, and the bundled ESP32 Arduino SDK fails the production-security audit. See [ESP32 production security and recovery](docs/production-security.md) before interpreting an artifact, and [Firmware releases and rollback](docs/releases.md) for publication evidence.
+
+The APE-82 foundation adds an internal signed inactive-slot writer, production-only boot-health confirmation/rollback, and public-key verification of externally signed/reproduced artifact evidence. It does not expose an OTA delivery endpoint, perform signing/eFuse enrollment, or approve a production build. Secure SDK/partition migration, encrypted LittleFS compatibility, authenticated delivery/recovery and hardware acceptance remain required.
 
 ## Wi-Fi firmware updates
 
@@ -195,7 +197,7 @@ Example live payload shape:
 - On ESP32, hold the UI button continuously for five seconds during boot to clear owner credentials and runtime settings while preserving the immutable device identity.
 
 ## Web endpoints
-ESP32 networking is unavailable until an identity-bound owner record is installed over USB, and a production-candidate build additionally requires runtime Secure Boot and flash-encryption state. ESP32 has no fallback AP. The ESP8266 development target can use the ignored `include/AppSecrets.h` and retains its bench-only fallback behavior.
+ESP32 networking is unavailable until an identity-bound owner record is installed over USB. A production-candidate build additionally requires the full secure SDK/runtime/storage posture described in the production-security runbook, including reviewed encrypted-queue qualification (currently blocked). ESP32 has no fallback AP. The ESP8266 development target can use the ignored `include/AppSecrets.h` and retains its bench-only fallback behavior.
 - `/` compact phone-friendly sensor dashboard with a basic fault summary
 - `/diagnostics` detailed connectivity, hardware, storage, transport, and sensor diagnostics
 - `/api/live` current readings and system state as JSON

@@ -10,11 +10,13 @@ from pathlib import Path
 
 
 REQUIRED_OPTIONS = {
+    "CONFIG_SECURE_BOOT": "hardware Secure Boot enforcement",
     "CONFIG_SECURE_BOOT_V2_ENABLED": "Secure Boot v2",
     "CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES": "signed application images",
     "CONFIG_SECURE_FLASH_ENC_ENABLED": "flash encryption",
     "CONFIG_SECURE_FLASH_ENCRYPTION_MODE_RELEASE": "release-mode flash encryption",
     "CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE": "bootloader rollback support",
+    "CONFIG_NVS_ENCRYPTION": "encrypted NVS owner credentials",
 }
 
 FORBIDDEN_OPTIONS = {
@@ -36,17 +38,27 @@ def enabled_options(path: Path) -> set[str]:
     return enabled
 
 
-def classify(path: Path, build_flags: str = "") -> dict[str, object]:
+def classify(path: Path, build_flags: str = "", *, external_signing: bool = False) -> dict[str, object]:
     enabled = enabled_options(path)
     missing = [option for option in REQUIRED_OPTIONS if option not in enabled]
+    if external_signing:
+        # Remote/HSM signing intentionally builds unsigned inputs. SDK posture
+        # alone can never prove those inputs were subsequently signed.
+        missing = [option for option in missing if option != "CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES"]
     insecure = [option for option in FORBIDDEN_OPTIONS if option in enabled]
     production_gate_enabled = bool(
         re.search(r"(?:^|\s)-D\s*APEXI_PRODUCTION_SECURITY_REQUIRED=1(?:\s|$)", build_flags)
     )
+    encrypted_queue_qualified = bool(
+        re.search(r"(?:^|\s)-D\s*APEXI_ENCRYPTED_QUEUE_QUALIFIED=1(?:\s|$)", build_flags)
+    )
     return {
         "schema_version": 1,
         "sdkconfig": str(path),
-        "production_eligible": not missing and not insecure and production_gate_enabled,
+        "production_eligible": not external_signing and not missing and not insecure and production_gate_enabled and encrypted_queue_qualified,
+        "encrypted_queue_qualified": encrypted_queue_qualified,
+        "sdk_security_ready": not missing and not insecure and production_gate_enabled,
+        "external_signature_required": external_signing,
         "production_gate_enabled": production_gate_enabled,
         "required_controls": [REQUIRED_OPTIONS[option] for option in REQUIRED_OPTIONS],
         "missing_options": missing,
@@ -70,6 +82,8 @@ def main() -> int:
         print("production-security: development-only")
         if not result["production_gate_enabled"]:
             print("missing: -D APEXI_PRODUCTION_SECURITY_REQUIRED=1")
+        if not result["encrypted_queue_qualified"]:
+            print("missing: reviewed encrypted queue qualification")
         for option in result["missing_options"]:
             print(f"missing: {option}")
         for option in result["insecure_options"]:

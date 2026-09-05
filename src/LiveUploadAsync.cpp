@@ -186,6 +186,16 @@ void LiveUpload::completeHttps(const uint32_t nowMs) {
   }
   if (accepted) {
     lastStatusPublishMs_ = nowMs;
+    StaticJsonDocument<96> filter;
+    filter["accepted"] = true;
+    filter["status"] = true;
+    StaticJsonDocument<192> acknowledgement;
+    if (deserializeJson(acknowledgement, response, DeserializationOption::Filter(filter)) == DeserializationError::Ok &&
+        acknowledgement["accepted"].is<bool>() && acknowledgement["accepted"].as<bool>() &&
+        String(acknowledgement["status"] | "") == "ok") {
+      authenticatedHeartbeatObserved_ = true;
+      lastAuthenticatedHeartbeatMs_ = nowMs;
+    }
     consumeHttpsDesiredConfig(response);
   }
 }
@@ -238,4 +248,10 @@ uint32_t LiveUpload::uploadCaptureDrops() const {
 #else
   return 0;
 #endif
+}
+
+bool LiveUpload::hasAuthenticatedHeartbeat() const {
+  return config_.protocol == AppConfig::UploadConfig::Protocol::Https &&
+         authenticatedHeartbeatObserved_ && httpsConnected_ &&
+         uint32_t(millis() - lastAuthenticatedHeartbeatMs_) < 60000;
 }

@@ -37,6 +37,11 @@ jobs:
       - name: Install PlatformIO Core
         run: pip install platformio intelhex
 
+      - name: Verify public-key release evidence tooling
+        run: |
+          pip install -r requirements-production-verification.txt
+          python -m unittest tests/test_signed_release_crypto.py
+
       - name: Run full repo verification
         run: ./scripts/verify-repo.sh --full
 

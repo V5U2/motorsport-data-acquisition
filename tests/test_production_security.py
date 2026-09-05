@@ -24,9 +24,15 @@ class ProductionSecurityTests(unittest.TestCase):
 
     def test_all_required_controls_are_production_eligible(self) -> None:
         config = "\n".join(f"{option}=y" for option in MODULE.REQUIRED_OPTIONS)
-        result = self.classify(config, "-std=gnu++17 -D APEXI_PRODUCTION_SECURITY_REQUIRED=1")
+        result = self.classify(config, "-std=gnu++17 -D APEXI_PRODUCTION_SECURITY_REQUIRED=1 -DAPEXI_ENCRYPTED_QUEUE_QUALIFIED=1")
         self.assertTrue(result["production_eligible"])
         self.assertEqual(result["missing_options"], [])
+
+    def test_unqualified_encrypted_queue_blocks_production(self) -> None:
+        config = "\n".join(f"{option}=y" for option in MODULE.REQUIRED_OPTIONS)
+        result = self.classify(config, "-DAPEXI_PRODUCTION_SECURITY_REQUIRED=1")
+        self.assertTrue(result["sdk_security_ready"])
+        self.assertFalse(result["production_eligible"])
 
     def test_missing_runtime_gate_is_not_production_eligible(self) -> None:
         config = "\n".join(f"{option}=y" for option in MODULE.REQUIRED_OPTIONS)
@@ -56,6 +62,16 @@ class ProductionSecurityTests(unittest.TestCase):
         result = self.classify(config, "-D APEXI_PRODUCTION_SECURITY_REQUIRED=1")
         self.assertFalse(result["production_eligible"])
         self.assertIn("CONFIG_SECURE_BOOT_ALLOW_JTAG", result["insecure_options"])
+
+    def test_external_signing_needs_artifact_verification(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sdkconfig"
+            path.write_text("\n".join(f"{name}=y" for name in MODULE.REQUIRED_OPTIONS
+                                      if name != "CONFIG_SECURE_BOOT_BUILD_SIGNED_BINARIES"))
+            result = MODULE.classify(path, "-DAPEXI_PRODUCTION_SECURITY_REQUIRED=1", external_signing=True)
+            self.assertTrue(result["sdk_security_ready"])
+            self.assertTrue(result["external_signature_required"])
+            self.assertFalse(result["production_eligible"])
 
 
 if __name__ == "__main__":

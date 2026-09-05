@@ -187,6 +187,8 @@ When using receiver modules:
 
 ## Commissioning checklist
 
+For production-gated builds, the full [secure SDK/storage and OTA policy](production-security.md) supersedes the basic fuse checks above. Encrypted NVS and an encrypted LittleFS profile are required; the latter is unqualified and keeps production networking/updates blocked. The secure partition template is a factory-migration input, never an application OTA payload. Production legacy ArduinoOTA is unconditionally disabled. Diagnostics reports `ota_boot_health`; pending images require sensors, durable queue and authenticated heartbeat health before confirmation, with one rollback attempt on timeout or confirmation failure. No authenticated signed-image delivery endpoint is exposed yet.
+
 If USB provisioning is interrupted or rejected, follow the [indeterminate inventory recovery procedure](provisioning.md) before retrying. A driver error or generic rejection does not establish whether the device retained credentials.
 
 For alert commissioning, follow the [periodic status diagnostics contract](status-diagnostics.md). Confirm observed queue/time/configuration signals and increasing transport/boot counters; unavailable hardware or counters must appear as missing fields rather than synthetic healthy zeros.

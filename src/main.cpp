@@ -22,6 +22,7 @@
 #include "SensorChannel.h"
 #include "Timekeeper.h"
 #include "WebUi.h"
+#include "SignedOtaEsp32.h"
 
 namespace {
 
@@ -42,6 +43,10 @@ LiveUpload liveUpload;
 RuntimeSettings runtimeSettings;
 DeviceProvisioning deviceProvisioning;
 AppBearerRotation appBearerRotation;
+#if defined(ESP32)
+SignedOtaEsp32 signedOtaBackend;
+OtaBootHealth otaBootHealth(signedOtaBackend);
+#endif
 
 bool adcReady = false;
 bool rtcReady = false;
@@ -138,6 +143,9 @@ AppState buildState() {
   state.system.flashEncryptionReleaseMode = flashEncryptionReleaseMode;
   state.system.productionSecurityReady = Logic::productionSecurityAllowsNetwork(
       state.system.productionSecurityRequired, secureBootEnabled, flashEncryptionReleaseMode);
+#if defined(ESP32)
+  if (state.system.productionSecurityRequired) state.system.productionSecurityReady = signedOtaBackend.securePosture();
+#endif
   state.system.adcReady = adcReady;
   state.system.displayEnabled = AppConfig::kFeatures.displayEnabled;
   state.system.rtcEnabled = AppConfig::kFeatures.rtcEnabled;
@@ -151,7 +159,8 @@ AppState buildState() {
   state.system.wifiReady = wifiReady;
   state.system.uploadEnabled = liveUpload.isEnabled();
   state.system.uploadConnected = liveUpload.isConnected();
-  state.system.otaEnabled = AppConfig::kFeatures.otaUpdatesEnabled;
+  state.system.otaEnabled = OtaPolicy::legacyAllowed(APEXI_PRODUCTION_SECURITY_REQUIRED != 0,
+                                                    AppConfig::kFeatures.otaUpdatesEnabled);
   state.system.otaReady = otaReady;
   state.system.wifiMode = webUi.modeString();
   state.system.ipAddress = webUi.ipAddress();
@@ -177,6 +186,11 @@ AppState buildState() {
   state.system.storeForwardError = liveUpload.storeForwardError();
   state.system.storeForwardOldestJson = liveUpload.queueOldestDiagnostics();
   state.system.uploadCaptureDrops = liveUpload.uploadCaptureDrops();
+#if defined(ESP32)
+  state.system.otaBootHealth = otaBootHealth.status();
+#else
+  state.system.otaBootHealth = "unsupported";
+#endif
   return state;
 }
 
@@ -190,7 +204,8 @@ void sampleSensors() {
 
 void beginOta() {
   const AppConfig::OtaConfig &ota = deviceProvisioning.otaConfig();
-  if (!AppConfig::kFeatures.otaUpdatesEnabled || !wifiReady ||
+  if (!OtaPolicy::legacyAllowed(APEXI_PRODUCTION_SECURITY_REQUIRED != 0,
+                                AppConfig::kFeatures.otaUpdatesEnabled) || !wifiReady ||
       webUi.modeString() != "STA" || strlen(ota.password) == 0) {
     otaReady = false;
     return;
@@ -233,7 +248,10 @@ bool syncRtcFromNetwork(const bool waitForInitialSync) {
   while (waitForInitialSync &&
          now < static_cast<time_t>(kValidNetworkEpoch) &&
          (millis() - startedMs) < kNtpSyncTimeoutMs) {
-    ArduinoOTA.handle();
+    if (otaReady && OtaPolicy::legacyAllowed(APEXI_PRODUCTION_SECURITY_REQUIRED != 0,
+                                            AppConfig::kFeatures.otaUpdatesEnabled)) {
+      ArduinoOTA.handle();
+    }
     webUi.handleClient();
     delay(100);
     now = time(nullptr);
@@ -269,6 +287,9 @@ void maintainRtcSync(const uint32_t nowMs) {
 }  // namespace
 
 void setup() {
+#if defined(ESP32)
+  otaBootHealth.begin(millis(), APEXI_PRODUCTION_SECURITY_REQUIRED != 0);
+#endif
   Serial.begin(115200);
   const uint32_t serialWaitStartMs = millis();
   while (!Serial && (millis() - serialWaitStartMs) < 5000) {
@@ -375,7 +396,11 @@ void setup() {
       kProductionEsp32Target, deviceProvisioning.isProvisioned()) &&
       Logic::productionSecurityAllowsNetwork(APEXI_PRODUCTION_SECURITY_REQUIRED != 0,
                                              secureBootEnabled,
-                                             flashEncryptionReleaseMode);
+                                             flashEncryptionReleaseMode)
+#if defined(ESP32)
+      && (APEXI_PRODUCTION_SECURITY_REQUIRED == 0 || signedOtaBackend.securePosture())
+#endif
+      ;
   if (networkAllowed) {
     appBearerRotation.begin(deviceProvisioning.uploadConfig().appDeviceToken);
     runtimeSettings.begin(deviceProvisioning.uploadConfig(),
@@ -458,6 +483,15 @@ void loop() {
   handleButton();
   webUi.handleClient();
   liveUpload.loop();
+#if defined(ESP32)
+  bool sensorsHealthy = adcReady;
+  for (const auto &sensor : sensorChannels) {
+    const auto snapshot = sensor.snapshot();
+    sensorsHealthy = sensorsHealthy && snapshot.hasValidSample && snapshot.activeFault == SensorFault::None;
+  }
+  otaBootHealth.poll(millis(), sensorsHealthy, liveUpload.storeForwardReady(),
+                     liveUpload.hasAuthenticatedHeartbeat());
+#endif
   webUi.setManagementPairingCode(liveUpload.pairingCode(),
                                  liveUpload.pairingCodeExpiresInSeconds());
   RemoteConfig remoteConfig{};
@@ -478,7 +512,8 @@ void loop() {
       liveUpload.rejectRemoteConfig();
     }
   }
-  if (otaReady) {
+  if (otaReady && OtaPolicy::legacyAllowed(APEXI_PRODUCTION_SECURITY_REQUIRED != 0,
+                                          AppConfig::kFeatures.otaUpdatesEnabled)) {
     ArduinoOTA.handle();
   }
 

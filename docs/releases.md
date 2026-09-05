@@ -6,6 +6,8 @@ The current workflow publishes development artifacts, not production-approved fi
 
 ## Promotion
 
+APE-82 now provides `scripts/verify_signed_release.py` for read-only candidate evidence: two unsigned build outputs must match, and externally signed bootloader/application images must verify against the public RSA-3072 key and secure partition profile. The verifier does not build, sign, publish, establish provenance or approve production hardware. Its output always remains candidate-only. External signing intentionally disables SDK build-time signing; follow the generated-SDK audit and artifact verification procedure in [production security](production-security.md), not a build-time-signing flag alone. Secure SDK migration, encrypted LittleFS compatibility, hash-locked toolchains, authorized delivery and physical boot/rollback evidence remain gates. Current release publication and Release Please settings are unchanged.
+
 1. Merge conventional commits to `main` only after required verification passes.
 2. Review the Release Please PR. Confirm its version and changelog, then merge it through normal protection.
 3. Confirm the tag points at that merge commit and the `release-firmware` workflow succeeds.
