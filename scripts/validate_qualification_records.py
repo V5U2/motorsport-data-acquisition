@@ -44,11 +44,16 @@ def validate(path: Path) -> list[str]:
     with path.open(newline="", encoding="utf-8-sig") as handle:
         reader = csv.DictReader(handle)
         fields = set(reader.fieldnames or [])
+        if len(fields) != len(reader.fieldnames or []):
+            errors.append(f"{path}: duplicate column names")
         missing = sorted(required - fields)
         if missing:
             errors.append(f"{path}: missing columns: {', '.join(missing)}")
             return errors
         for line_number, row in enumerate(reader, start=2):
+            if None in row or any(value is None for value in row.values()):
+                errors.append(f"{path}:{line_number}: row width does not match header")
+                continue
             result = (row.get("result") or "").strip().lower()
             if result and result not in ALLOWED_RESULTS:
                 errors.append(f"{path}:{line_number}: invalid result {result!r}")

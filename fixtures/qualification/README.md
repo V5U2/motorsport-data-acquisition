@@ -8,5 +8,4 @@ These CSV files are blank schemas for APE-85 physical evidence. Copy them into `
 
 Use ISO 8601 UTC timestamps. Preserve failed and repeated rows. Never store secrets, bearer values, Wi-Fi passwords, Cloudflare credentials, or MQTT passwords in these records.
 
-Run `python3 scripts/validate_qualification_records.py` to validate the checked-in templates, or pass copied result files to validate their headers and controlled fields. This validates record shape, not truth, calibration accuracy, or hardware acceptance.
-
+Run `python3 scripts/validate_qualification_records.py` to validate the checked-in templates, or pass copied result files to validate their headers and controlled fields. Duplicate header names, truncated rows, and surplus columns fail validation. Header-only templates remain valid, and CSV quoting allows commas inside fields. This validates record shape, not truth, calibration accuracy, or hardware acceptance.

@@ -164,7 +164,9 @@ On ESP32 HTTPS deployments, app bearer rotation uses the same outbound status
 path and does not require another pin or inbound service. Do not remove power
 during a planned cutover merely to force an update: the staged rotation survives
 power loss and resumes automatically, while the old bearer is retained until the
-candidate is proven. If both credentials are rejected after the server overlap,
+candidate is proven. The acknowledgement phase uses a single NVS key update;
+candidate proof and subsequent heartbeats omit the completed acknowledgement.
+If both credentials are rejected after the server overlap,
 perform the documented physical owner reset and authorized USB re-provisioning;
 do not erase eFuses or substitute a fleet-wide credential.
 

@@ -2,6 +2,9 @@
 #include <iostream>
 
 #include "AppBearerRotation.h"
+#if defined(ESP32)
+#include <Preferences.h>
+#endif
 
 namespace {
 
@@ -24,6 +27,7 @@ void testSafeRotationSequence() {
          "stages a valid candidate");
   expect(rotation.phase() == AppBearerRotation::Phase::Staged,
          "old bearer acknowledges staged candidate first");
+  expect(rotation.hasAppliedAcknowledgement(), "staged heartbeat sends acknowledgement");
   expect(String(rotation.activeBearer()) == String("old-bearer-token-0001"),
          "old bearer remains active before acknowledgement");
   expect(rotation.markAcknowledged(), "persists acknowledgement boundary");
@@ -33,7 +37,7 @@ void testSafeRotationSequence() {
   expect(String(rotation.activeBearer()) == String("new-bearer-token-0007"),
          "new bearer becomes active");
   expect(!rotation.hasCandidate(), "candidate is cleared after promotion");
-  expect(rotation.hasAppliedAcknowledgement(), "applied acknowledgement survives promotion");
+  expect(!rotation.hasAppliedAcknowledgement(), "completed heartbeat omits stale acknowledgement");
   expect(rotation.stage(7, "nonce-0007", "new-bearer-token-0007",
                         "2026-09-05T12:00:00Z") ==
              AppBearerRotation::StageResult::AlreadyApplied,
@@ -119,17 +123,57 @@ void testRotationSurvivesRebootBoundaries() {
   afterAckReboot.begin("old-bearer-token-0001");
   expect(afterAckReboot.phase() == AppBearerRotation::Phase::Acknowledged,
          "acknowledged candidate survives reboot");
+  expect(!afterAckReboot.hasAppliedAcknowledgement(),
+         "candidate proof retries omit acknowledgement even after lost response");
   expect(afterAckReboot.promoteCandidate(), "candidate promotes after reboot proof");
 
   AppBearerRotation afterPromotionReboot;
   afterPromotionReboot.begin("old-bearer-token-0001");
   expect(String(afterPromotionReboot.activeBearer()) == String("new-bearer-token-0012"),
          "promoted bearer survives reboot");
-  expect(afterPromotionReboot.hasAppliedAcknowledgement(),
-         "applied acknowledgement survives reboot");
+  expect(!afterPromotionReboot.hasAppliedAcknowledgement(),
+         "completed acknowledgement stays suppressed after reboot");
 }
 
 }  // namespace
+
+#if defined(ESP32)
+void testNvsAcknowledgementFailures() {
+  AppBearerRotation rotation;
+  rotation.factoryReset();
+  rotation.begin("old-bearer-token-0001");
+  rotation.stage(1, "nonce-0001", "new-bearer-token-0001", "2026-09-05T14:00:00Z");
+  Preferences::failKey = "phase";
+  expect(!rotation.markAcknowledged(), "failed NVS phase commit is reported");
+  expect(rotation.phase() == AppBearerRotation::Phase::Staged,
+         "failed commit cannot advance in-memory phase");
+  expect(!rotation.promoteCandidate(), "failed commit cannot permit promotion");
+  AppBearerRotation reboot;
+  reboot.begin("old-bearer-token-0001");
+  expect(reboot.hasCandidate() && reboot.hasAppliedAcknowledgement(),
+         "failed acknowledgement write preserves durable candidate and ack retry");
+  Preferences::failKey.clear();
+  Preferences::cutAfterKey = "phase";
+  try {
+    reboot.markAcknowledged();
+    expect(false, "power cut must interrupt phase commit");
+  } catch (const Preferences::PowerCut &) {}
+  Preferences::cutAfterKey.clear();
+  AppBearerRotation afterCut;
+  afterCut.begin("old-bearer-token-0001");
+  expect(afterCut.hasCandidate() && afterCut.phase() == AppBearerRotation::Phase::Acknowledged,
+         "cut after atomic phase commit retains candidate for proof");
+  expect(!afterCut.hasAppliedAcknowledgement(), "proof retry after reboot omits stale ack");
+  Preferences::failKey = "active";
+  expect(!afterCut.promoteCandidate(), "failed promotion retains candidate");
+  Preferences::failKey.clear();
+  AppBearerRotation afterPromotionFailure;
+  afterPromotionFailure.begin("old-bearer-token-0001");
+  expect(afterPromotionFailure.hasCandidate() && !afterPromotionFailure.hasAppliedAcknowledgement(),
+         "lost proof response or failed promotion retries without stale ack");
+  expect(afterPromotionFailure.promoteCandidate(), "promotion can recover after write failure");
+}
+#endif
 
 int main() {
   testSafeRotationSequence();
@@ -137,6 +181,9 @@ int main() {
   testMalformedRotationRejected();
   testAbandonKeepsRecoveryBearer();
   testRotationSurvivesRebootBoundaries();
+#if defined(ESP32)
+  testNvsAcknowledgementFailures();
+#endif
   if (failures == 0) {
     std::cout << "All app bearer rotation host tests passed\n";
     return EXIT_SUCCESS;
