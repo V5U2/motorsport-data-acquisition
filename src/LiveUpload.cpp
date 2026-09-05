@@ -15,7 +15,7 @@
 
 namespace {
 
-constexpr uint16_t kMqttBufferSize = 2048;
+constexpr uint16_t kMqttBufferSize = 3072;
 constexpr uint16_t kMqttSocketTimeoutSeconds = 1;
 constexpr uint32_t kNetworkClientTimeoutMs = 500;
 constexpr uint32_t kStatusHeartbeatMs = 30000;
@@ -379,6 +379,7 @@ bool LiveUpload::consumeRemoteConfig(RemoteConfig &config) {
 
 void LiveUpload::acknowledgeRemoteConfig(const uint32_t version) {
   appliedConfigVersion_ = version;
+  diagnostics_.configurationApplied(version);
   managementStatus_ = "applied";
   managementError_ = "";
   if (mqttClient_.connected()) {
@@ -387,6 +388,12 @@ void LiveUpload::acknowledgeRemoteConfig(const uint32_t version) {
              WiFi.status() == WL_CONNECTED) {
     publishStatus(true);
   }
+}
+
+void LiveUpload::rejectRemoteConfig() {
+  diagnostics_.configurationRejected();
+  managementStatus_ = "rejected";
+  managementError_ = "Desired configuration could not be persisted";
 }
 
 bool LiveUpload::reconnect(const uint32_t nowMs) {
@@ -400,6 +407,7 @@ bool LiveUpload::reconnect(const uint32_t nowMs) {
   }
 
   bool connected = false;
+  diagnostics_.transportAttempt(true);
   const String willPayload = buildStatusJson(false);
   if (strlen(config_.mqttUsername) > 0) {
     connected = mqttClient_.connect(clientId_.c_str(),
@@ -439,6 +447,7 @@ bool LiveUpload::reconnect(const uint32_t nowMs) {
 
 void LiveUpload::publishOfflineStatusAndDisconnect() {
   if (config_.protocol == AppConfig::UploadConfig::Protocol::Https) {
+    httpsRecoveryPending_ = true;
     httpsConnected_ = false;
     return;
   }
@@ -523,6 +532,7 @@ void LiveUpload::handleMqttMessage(char *topic, uint8_t *payload, unsigned int l
     return;
   }
   if (!consumeDesiredState(payload, length)) {
+    diagnostics_.configurationRejected();
     managementStatus_ = "rejected";
     managementError_ = "Invalid desired management state";
   }
@@ -538,7 +548,9 @@ bool LiveUpload::consumeDesiredState(const uint8_t *payload, const unsigned int 
       String(document["device_id"].as<const char *>()) != deviceId_) {
     return false;
   }
+  if (!document["config_version"].is<uint32_t>()) return false;
   const uint32_t version = document["config_version"].as<uint32_t>();
+  diagnostics_.observeDesired(version, appliedConfigVersion_);
   RemoteConfig candidate{};
   if (version > appliedConfigVersion_) {
     if (!parseRemoteConfig(payload, length, candidate)) {
@@ -561,6 +573,7 @@ bool LiveUpload::consumeDesiredState(const uint8_t *payload, const unsigned int 
     managementStatus_ = "applied";
   }
   managementError_ = "";
+  diagnostics_.configurationAccepted();
   return true;
 }
 
@@ -746,6 +759,7 @@ bool LiveUpload::postHttps(const char *kind,
                            String *responseBody,
                            const char *bearer) {
   lastHttpsAttemptMs_ = millis();
+  diagnostics_.transportAttempt(httpsRecoveryPending_);
   HTTPClient http;
   http.setTimeout(kHttpsTimeoutMs);
   http.setReuse(true);
@@ -761,6 +775,7 @@ bool LiveUpload::postHttps(const char *kind,
     lastHttpStatus_ = -1;
     lastPostRetryable_ = true;
     lastError_ = "HTTPS request setup failed";
+    httpsRecoveryPending_ = true;
     httpsConnected_ = false;
     return false;
   }
@@ -786,6 +801,7 @@ bool LiveUpload::postHttps(const char *kind,
   const String body = status > 0 ? http.getString() : "";
   http.end();
   if (status < 200 || status >= 300) {
+    httpsRecoveryPending_ = true;
     if (status < 0) {
       lastError_ = "HTTPS " + HTTPClient::errorToString(status);
 #if defined(ESP8266)
@@ -807,6 +823,7 @@ bool LiveUpload::postHttps(const char *kind,
     *responseBody = body;
   }
   lastPostRetryable_ = false;
+  httpsRecoveryPending_ = false;
   return true;
 }
 
@@ -823,6 +840,7 @@ void LiveUpload::consumeHttpsDesiredConfig(const String &responseBody) {
   serializeJson(document["desired_config"], encoded);
   if (!consumeDesiredState(
           reinterpret_cast<const uint8_t *>(encoded.c_str()), encoded.length())) {
+    diagnostics_.configurationRejected();
     managementStatus_ = "rejected";
     managementError_ = "Invalid desired management state";
   }
@@ -854,6 +872,11 @@ String LiveUpload::buildStatusJson(const bool connected) const {
   json += "\"session_id\":\"" + jsonEscape(sessionId_) + "\",";
   json += "\"protocol\":\"" + protocolName() + "\",";
   json += "\"connected\":" + String(connected ? "true" : "false");
+  json += ",\"system\":";
+  json += diagnostics_.json(storeForwardEnabled() && storeForwardReady(),
+                            storeForwardPendingRecords(),
+                            storeForwardDroppedRecords(),
+                            storeForwardQueue_.droppedRecordsKnown()).c_str();
   if (remoteManagementEnabled_) {
     json += ",\"management\":{";
     json += "\"enabled\":true,";

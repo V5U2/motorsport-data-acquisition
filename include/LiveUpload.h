@@ -15,6 +15,7 @@
 #include "AppBearerRotation.h"
 #include "RemoteConfig.h"
 #include "StoreForwardQueue.h"
+#include "StatusDiagnostics.h"
 #include "Types.h"
 
 class LiveUpload {
@@ -59,6 +60,9 @@ class LiveUpload {
                          const char *provisionedAt);
   bool consumeRemoteConfig(RemoteConfig &config);
   void acknowledgeRemoteConfig(uint32_t version);
+  void rejectRemoteConfig();
+  void setClockFault(bool fault) { diagnostics_.observeClockFault(fault); }
+  void recordCompletedBoot() { diagnostics_.recordCompletedBoot(); }
 
  private:
   bool reconnect(uint32_t nowMs);
@@ -132,4 +136,6 @@ class LiveUpload {
   bool lastPostRetryable_ = false;
   StoreForwardQueue storeForwardQueue_;
   AppBearerRotation *bearerRotation_ = nullptr;
+  StatusDiagnostics diagnostics_;
+  bool httpsRecoveryPending_ = false;
 };

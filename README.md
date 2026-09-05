@@ -103,6 +103,7 @@ The ESP32 target uses the checked-in 16 MB partition table: two 2 MB OTA applica
 Production brokers require authentication. USB provisioning requires the MQTT username to equal the immutable device ID; the broker ACL uses that identity to limit the device to publishing `<topicPrefix>/<deviceId>/live` and `<topicPrefix>/<deviceId>/status`. When remote management is enabled, it may additionally read only its own `<topicPrefix>/<deviceId>/config/desired` topic. Keep the matching password in the encrypted infrastructure vault.
 
 Current behavior:
+- Periodic status adds observed queue, clock, configuration, reconnection, and persistent ESP32 boot diagnostics under `system`. Missing fields mean unavailable, not zero; see the [status diagnostics contract](docs/status-diagnostics.md).
 - The device publishes live sensor snapshots to MQTT on a fixed interval.
 - Each message includes `schema_version`, a normalized `device_id`, a per-boot `session_id`, a monotonic `sequence`, the current timestamp, and the current sensor values.
 - The retained MQTT status topic now reflects both online and offline state so downstream consumers do not keep stale liveness.

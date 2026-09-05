@@ -15,6 +15,7 @@ class StoreForwardQueue {
   size_t pendingBytes() const;
   size_t capacityBytes() const;
   uint32_t droppedRecords() const;
+  bool droppedRecordsKnown() const;
   uint32_t corruptionEvents() const;
   size_t quarantinedBytes() const;
   String lastError() const;

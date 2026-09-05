@@ -12,7 +12,9 @@ class Preferences {
   inline static std::map<std::string, std::string> values;
   inline static std::string failKey;
   inline static std::string cutAfterKey;
-  bool begin(const char *, bool) { return true; }
+  inline static bool failOpen = false;
+  bool begin(const char *, bool) { return !failOpen; }
+  bool isKey(const char *key) const { return values.count(key) != 0; }
   void end() {}
   bool clear() { values.clear(); return true; }
   bool remove(const char *key) { return values.erase(key) > 0; }

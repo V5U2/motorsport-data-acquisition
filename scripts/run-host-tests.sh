@@ -20,6 +20,7 @@ mkdir -p "$BUILD_DIR"
   -I"$ROOT_DIR/include" \
   "$ROOT_DIR/tests/fakes/LittleFS.cpp" \
   "$ROOT_DIR/src/StoreForwardQueue.cpp" \
+  "$ROOT_DIR/src/StatusDiagnostics.cpp" \
   "$ROOT_DIR/tests/store_forward_queue_tests.cpp" \
   -o "$BUILD_DIR/store_forward_queue_tests"
 
@@ -45,3 +46,11 @@ python3 -m unittest "$ROOT_DIR/tests/test_provision_device.py"
 python3 -m unittest "$ROOT_DIR/tests/test_production_security.py"
 python3 -m unittest "$ROOT_DIR/tests/test_security_surface.py"
 python3 -m unittest "$ROOT_DIR/tests/test_qualification_records.py"
+
+for target in ESP32 ESP8266; do
+  /usr/bin/c++ -std=c++17 -Wall -Wextra -Werror -D"$target" \
+    -I"$ROOT_DIR/tests/fakes" -I"$ROOT_DIR/include" \
+    "$ROOT_DIR/src/StatusDiagnostics.cpp" "$ROOT_DIR/tests/status_diagnostics_tests.cpp" \
+    -o "$BUILD_DIR/status_diagnostics_$target"
+  "$BUILD_DIR/status_diagnostics_$target"
+done
