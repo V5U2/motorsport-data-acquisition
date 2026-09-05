@@ -187,6 +187,8 @@ When using receiver modules:
 
 ## Commissioning checklist
 
+If USB provisioning is interrupted or rejected, follow the [indeterminate inventory recovery procedure](provisioning.md) before retrying. A driver error or generic rejection does not establish whether the device retained credentials.
+
 For alert commissioning, follow the [periodic status diagnostics contract](status-diagnostics.md). Confirm observed queue/time/configuration signals and increasing transport/boot counters; unavailable hardware or counters must appear as missing fields rather than synthetic healthy zeros.
 
 1. Follow the [provisioning runbook](provisioning.md), record the non-secret immutable device ID, and verify it matches the app credential subject.

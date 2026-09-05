@@ -183,6 +183,7 @@ Example live payload shape:
 ```
 
 ## Host-side tests
+- USB provisioning tests also cover write/flush/read interruption, partial writes, and unconfirmed cleanup after rejection, keeping an indeterminate reservation when device state is unknown.
 - Run `./scripts/run-host-tests.sh` to execute hardware-independent logic tests on a desktop machine.
 - These tests cover sensor conversion and faults, timestamps, filenames, identity derivation, malformed or mismatched provisioning, duplicate fleet IDs, and secret-free inventory output.
 - GitHub Actions is configured to run the repo fast verification path on pushes and pull requests in [host-tests.yml](.github/workflows/host-tests.yml).

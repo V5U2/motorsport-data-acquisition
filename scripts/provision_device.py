@@ -163,7 +163,7 @@ def commission_identity(
             existing["status"] = "indeterminate"
             _write_inventory(inventory_path, inventory)
             raise
-        except Exception:
+        except ProvisioningError:
             if previous is None:
                 devices.remove(existing)
             else:
@@ -171,6 +171,14 @@ def commission_identity(
                 existing.update(previous)
             _write_inventory(inventory_path, inventory)
             raise
+        except Exception:
+            # A driver/write/flush/read exception is not proof that the device
+            # rejected the bundle. It may already have committed owner state.
+            existing["status"] = "indeterminate"
+            _write_inventory(inventory_path, inventory)
+            raise ProvisioningIndeterminate(
+                "provisioning delivery was interrupted; inspect the device before retrying"
+            ) from None
         existing["status"] = "committed"
         _write_inventory(inventory_path, inventory)
 
@@ -203,7 +211,11 @@ def provision_serial(
 
         def deliver(validated: dict[str, Any]) -> None:
             payload = json.dumps(validated, separators=(",", ":"))
-            connection.write(("APEXI_PROVISION " + payload + "\n").encode())
+            encoded = ("APEXI_PROVISION " + payload + "\n").encode()
+            if connection.write(encoded) != len(encoded):
+                raise ProvisioningIndeterminate(
+                    "provisioning write was incomplete; inspect the device before retrying"
+                )
             connection.flush()
             acknowledgement_deadline = time.monotonic() + 5
             while time.monotonic() < acknowledgement_deadline:
@@ -211,7 +223,12 @@ def provision_serial(
                 if line == "PROVISIONING_RESULT=accepted":
                     return
                 if line.startswith("PROVISIONING_RESULT=rejected"):
-                    raise ProvisioningError(line)
+                    # Legacy firmware can reject after committing owner state
+                    # without proving that its rollback succeeded.
+                    raise ProvisioningIndeterminate(
+                        "logger rejected provisioning but credential cleanup is unconfirmed; "
+                        "inspect the device before retrying"
+                    )
             raise ProvisioningIndeterminate(
                 "logger acknowledgement was not received; inventory remains indeterminate"
             )
