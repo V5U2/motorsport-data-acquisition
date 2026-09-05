@@ -30,6 +30,8 @@ The tool resets the board, reads the identity, checks the complete bundle, atomi
 
 After restart, check that serial output reports the expected `DEVICE_ID` and `PROVISIONING_STATUS=provisioned`. Check `/api/live` for the same non-secret ID, friendly name, hardware revision, and provisioning timestamp. Verify station Wi-Fi and the app HTTPS heartbeat. The API and settings page must never contain Wi-Fi, OTA, MQTT, Cloudflare, or app bearer values.
 
+A partial serial write or exception during write, flush, or acknowledgement read leaves the inventory `indeterminate`, including during re-provisioning. Only an explicit device rejection permits reservation rollback. Do not interpret a disconnected USB cable or driver failure as evidence that the old owner credentials remain installed. Inspect the logger before an authorized retry; driver exception details and arbitrary rejection text are not printed because they can contain bundle data.
+
 ## Re-provision and ownership transfer
 
 Before transfer, revoke the existing app bearer, Cloudflare service token or MQTT credential at their issuers. Create fresh credentials for the new owner and run the same command with `--reprovision`. The explicit flag permits the existing immutable ID in the inventory; it does not create or change device identity. Confirm the old credentials fail and the new app owner can claim the same physical logger.

@@ -3,6 +3,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 MODULE_PATH = Path(__file__).parents[1] / "scripts" / "provision_device.py"
 SPEC = importlib.util.spec_from_file_location("provision_device", MODULE_PATH)
@@ -32,6 +34,74 @@ def bundle(device_id="mda-aabbccddeeff"):
 
 
 class ProvisionDeviceTests(unittest.TestCase):
+    def test_serial_interruptions_preserve_reservation_and_redact_errors(self):
+        for fault in ("write", "short_write", "flush", "read"):
+            for reprovision in (False, True):
+                with self.subTest(fault=fault, reprovision=reprovision):
+                    class Connection:
+                        identified = False
+
+                        def __enter__(self):
+                            return self
+
+                        def __exit__(self, *_):
+                            pass
+
+                        def write(self, data):
+                            if fault == "write":
+                                raise OSError("driver echoed password123")
+                            return len(data) - 1 if fault == "short_write" else len(data)
+
+                        def flush(self):
+                            if fault == "flush":
+                                raise OSError("driver echoed password123")
+
+                        def readline(self):
+                            if not self.identified:
+                                self.identified = True
+                                return b"DEVICE_ID=mda-aabbccddeeff\n"
+                            raise OSError("driver echoed password123")
+
+                    with tempfile.TemporaryDirectory() as directory:
+                        path = Path(directory) / "inventory.json"
+                        if reprovision:
+                            provision_device.reserve_identity(path, "mda-aabbccddeeff", bundle(), False)
+                        with patch.dict("sys.modules", {"serial": SimpleNamespace(Serial=lambda *a, **kw: Connection())}), patch.object(provision_device.time, "sleep"):
+                            with self.assertRaises(provision_device.ProvisioningIndeterminate) as error:
+                                provision_device.provision_serial("fake", bundle(), path, reprovision)
+                        self.assertNotIn("password123", str(error.exception))
+                        self.assertEqual(json.loads(path.read_text())["devices"][0]["status"], "indeterminate")
+                        self.assertNotIn("password123", path.read_text())
+                        with self.assertRaisesRegex(provision_device.ProvisioningError, "indeterminate"):
+                            provision_device.reserve_identity(path, "mda-aabbccddeeff", bundle(), False)
+
+    def test_serial_definitive_result_commits_or_rolls_back(self):
+        for accepted in (True, False):
+            with self.subTest(accepted=accepted):
+                class Connection:
+                    lines = iter([
+                        b"DEVICE_ID=mda-aabbccddeeff\n",
+                        b"PROVISIONING_RESULT=accepted\n" if accepted else b"PROVISIONING_RESULT=rejected private-device-text\n",
+                    ])
+
+                    def __enter__(self): return self
+                    def __exit__(self, *_): pass
+                    def write(self, data): return len(data)
+                    def flush(self): pass
+                    def readline(self): return next(self.lines)
+
+                with tempfile.TemporaryDirectory() as directory:
+                    path = Path(directory) / "inventory.json"
+                    with patch.dict("sys.modules", {"serial": SimpleNamespace(Serial=lambda *a, **kw: Connection())}), patch.object(provision_device.time, "sleep"):
+                        if accepted:
+                            provision_device.provision_serial("fake", bundle(), path, False)
+                            self.assertEqual(json.loads(path.read_text())["devices"][0]["status"], "committed")
+                        else:
+                            with self.assertRaises(provision_device.ProvisioningError) as error:
+                                provision_device.provision_serial("fake", bundle(), path, False)
+                            self.assertNotIn("private-device-text", str(error.exception))
+                            self.assertEqual(json.loads(path.read_text())["devices"], [])
+
     def test_accepts_identity_bound_bundle(self):
         validated = provision_device.validate_bundle(bundle(), "mda-aabbccddeeff")
         self.assertEqual(validated["expected_device_id"], "mda-aabbccddeeff")
