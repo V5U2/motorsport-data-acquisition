@@ -6,6 +6,22 @@ BUILD_DIR="$ROOT_DIR/.build-tests"
 
 mkdir -p "$BUILD_DIR"
 
+/usr/bin/c++ -std=c++17 -Wall -Wextra -Werror -I"$ROOT_DIR/include" \
+  "$ROOT_DIR/src/SignedOta.cpp" "$ROOT_DIR/tests/signed_ota_tests.cpp" \
+  -o "$BUILD_DIR/signed_ota_tests"
+"$BUILD_DIR/signed_ota_tests"
+
+# Exercise the secure branch against fake SDK APIs, never real eFuses/flash.
+/usr/bin/c++ -std=c++17 -Wall -Wextra -Werror -DESP32 \
+  -DAPEXI_PRODUCTION_SECURITY_REQUIRED=1 -DAPEXI_ENCRYPTED_QUEUE_QUALIFIED=1 \
+  -DCONFIG_SECURE_BOOT_V2_ENABLED=1 -DCONFIG_SECURE_BOOT=1 \
+  -DCONFIG_SECURE_FLASH_ENC_ENABLED=1 -DCONFIG_SECURE_FLASH_ENCRYPTION_MODE_RELEASE=1 \
+  -DCONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=1 -DCONFIG_NVS_ENCRYPTION=1 \
+  -I"$ROOT_DIR/tests/fakes/ota" -I"$ROOT_DIR/include" \
+  "$ROOT_DIR/src/SignedOtaEsp32.cpp" "$ROOT_DIR/tests/signed_ota_esp32_tests.cpp" \
+  -o "$BUILD_DIR/signed_ota_esp32_tests"
+"$BUILD_DIR/signed_ota_esp32_tests"
+
 /usr/bin/c++ -std=c++17 -Wall -Wextra -Werror -pthread \
   -I"$ROOT_DIR/include" "$ROOT_DIR/tests/https_exchange_tests.cpp" \
   -o "$BUILD_DIR/https_exchange_tests"
@@ -49,6 +65,7 @@ mkdir -p "$BUILD_DIR"
 
 python3 -m unittest "$ROOT_DIR/tests/test_provision_device.py"
 python3 -m unittest "$ROOT_DIR/tests/test_production_security.py"
+python3 -m unittest "$ROOT_DIR/tests/test_signed_release.py"
 python3 -m unittest "$ROOT_DIR/tests/test_security_surface.py"
 python3 -m unittest "$ROOT_DIR/tests/test_qualification_records.py"
 

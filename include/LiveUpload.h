@@ -34,6 +34,7 @@ class LiveUpload {
 
   bool isEnabled() const;
   bool isConnected();
+  bool hasAuthenticatedHeartbeat() const;
   String protocolName() const;
   String serverName() const;
   String sessionId() const;
@@ -131,6 +132,8 @@ class LiveUpload {
   uint32_t lastHttpsAttemptMs_ = 0;
   uint32_t lastSequence_ = 0;
   uint32_t lastStatusPublishMs_ = 0;
+  uint32_t lastAuthenticatedHeartbeatMs_ = 0;
+  bool authenticatedHeartbeatObserved_ = false;
   uint32_t appliedConfigVersion_ = 0;
   String deviceId_;
   String sessionId_;

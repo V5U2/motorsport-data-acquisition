@@ -25,6 +25,7 @@ This repo uses a small set of source-of-truth files for the important facts, and
 | Repo-wide verification wrapper | [`scripts/verify-repo.sh`](../scripts/verify-repo.sh) | Canonical local/CI verification entrypoint |
 | CI build/release behavior | [`.github/workflows/`](../.github/workflows/) | Must stay aligned with `platformio.ini` env/artifact paths |
 | Production image classification | [`scripts/check_production_security.py`](../scripts/check_production_security.py), [`docs/production-security.md`](production-security.md) | Secure Boot v2, signed binaries, release-mode flash encryption, and rollback must all be present before an ESP32 image is production-eligible |
+| Signed OTA and release evidence | [`include/SignedOta.h`](../include/SignedOta.h), [`src/SignedOta.cpp`](../src/SignedOta.cpp), [`src/SignedOtaEsp32.cpp`](../src/SignedOtaEsp32.cpp), [`scripts/verify_signed_release.py`](../scripts/verify_signed_release.py), [`production/`](../production/) | Internal signed inactive-slot writer, deferred boot-health confirmation, bounded rollback, and non-approving reproducibility/public-signature evidence; no authorized delivery ingress yet |
 
 ## Verification Contract
 

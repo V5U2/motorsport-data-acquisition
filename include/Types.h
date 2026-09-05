@@ -51,6 +51,7 @@ struct SystemStatus {
   bool uploadConnected;
   bool otaEnabled;
   bool otaReady;
+  String otaBootHealth;
   String wifiMode;
   String ipAddress;
   String currentLogFile;
