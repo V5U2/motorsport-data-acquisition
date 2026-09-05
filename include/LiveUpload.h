@@ -17,6 +17,8 @@
 #include "StoreForwardQueue.h"
 #include "StatusDiagnostics.h"
 #include "Types.h"
+#include "HttpsWorker.h"
+#include "HttpsPacing.h"
 
 class LiveUpload {
  public:
@@ -46,6 +48,8 @@ class LiveUpload {
   uint32_t storeForwardCorruptionEvents() const;
   size_t storeForwardQuarantinedBytes() const;
   String storeForwardError() const;
+  String queueOldestDiagnostics() const;
+  uint32_t uploadCaptureDrops() const;
   String pairingCode() const;
   uint32_t pairingCodeExpiresInSeconds() const;
   String managementStatus() const;
@@ -65,6 +69,28 @@ class LiveUpload {
   void recordCompletedBoot() { diagnostics_.recordCompletedBoot(); }
 
  private:
+#if defined(ESP32)
+  enum class HttpsOperation { None, Status, RotationAck, RotationProof, RotationFallback, Snapshot };
+  void serviceHttps(uint32_t nowMs);
+  bool captureHttps(const AppState &state);
+  bool submitHttps(HttpsOperation operation, const String &payload, const char *bearer);
+  void completeHttps(uint32_t nowMs);
+  void refreshQueueOldest();
+  HttpsWorker httpsWorker_;
+  HttpsPacing httpsPacing_;
+  HttpsOperation httpsOperation_ = HttpsOperation::None;
+  bool httpsStatusRequested_ = true;
+  bool httpsFallbackRequested_ = false;
+  bool httpsBackoff_ = false;
+  bool httpsSnapshotDurable_ = false;
+  String httpsSnapshotPayload_;
+  String volatileSnapshot_;
+  String queueOldestSession_;
+  String queueOldestTimestamp_;
+  uint32_t queueOldestSequence_ = 0;
+  uint32_t queueOldestEpoch_ = 0;
+  uint32_t captureDrops_ = 0;
+#endif
   bool reconnect(uint32_t nowMs);
   void publishOfflineStatusAndDisconnect();
   bool publishStatus(bool connected);

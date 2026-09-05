@@ -6,6 +6,11 @@ BUILD_DIR="$ROOT_DIR/.build-tests"
 
 mkdir -p "$BUILD_DIR"
 
+/usr/bin/c++ -std=c++17 -Wall -Wextra -Werror -pthread \
+  -I"$ROOT_DIR/include" "$ROOT_DIR/tests/https_exchange_tests.cpp" \
+  -o "$BUILD_DIR/https_exchange_tests"
+"$BUILD_DIR/https_exchange_tests"
+
 /usr/bin/c++ -std=c++17 -Wall -Wextra -Werror \
   -I"$ROOT_DIR/include" \
   "$ROOT_DIR/src/Logic.cpp" \

@@ -73,6 +73,8 @@ struct SystemStatus {
   uint32_t storeForwardCorruptionEvents;
   size_t storeForwardQuarantinedBytes;
   String storeForwardError;
+  String storeForwardOldestJson;
+  uint32_t uploadCaptureDrops;
 };
 
 struct AppState {

@@ -226,6 +226,29 @@ void testInterruptedCapacityDropKeepsOldestSegment() {
 }  // namespace
 
 int main() {
+  {
+    LittleFS.reset();
+    StoreForwardQueue queue;
+    expect(queue.begin(true, 128), "async queue starts");
+    const String submitted("11111111111111111111");
+    expect(queue.enqueue(submitted), "capture submitted head");
+    for (const char *record : {"22222222222222222222", "33333333333333333333",
+                              "44444444444444444444", "55555555555555555555"}) {
+      expect(queue.enqueue(record), "capture while request is in flight");
+    }
+    const auto pending = queue.pendingRecords();
+    String current;
+    expect(queue.peek(current) && current != submitted, "capacity rotation replaced in-flight head");
+    expect(queue.popIfMatches(submitted), "late HTTP success is harmless");
+    expect(queue.pendingRecords() == pending, "late success cannot pop newer head");
+    expect(queue.popIfMatches(current), "matching HTTP success acknowledges exact record");
+    expect(queue.pendingRecords() == pending - 1, "only matching head removed");
+    expect(queue.peek(current), "next record exists");
+    LittleFS.failNextRename();
+    expect(!queue.popIfMatches(current), "metadata failure retains record for retry");
+    String retry;
+    expect(queue.peek(retry) && retry == current, "retry has exact original identity");
+  }
   testAppendReplayAndReboot();
   testMountFailureNeverFormats();
   testTornAppendRepairsOnlyInvalidTail();

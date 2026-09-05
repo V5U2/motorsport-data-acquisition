@@ -8,6 +8,9 @@ class StoreForwardQueue {
   bool enqueue(const String &payload);
   bool peek(String &payload);
   bool pop(bool discarded = false);
+  // An append can rotate away a submitted record before HTTP completes.
+  // Never acknowledge the replacement head in that case.
+  bool popIfMatches(const String &submitted, bool discarded = false);
 
   bool isEnabled() const;
   bool isReady() const;
